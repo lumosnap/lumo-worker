@@ -1,0 +1,5 @@
+name = "lumo-worker"
+main = "src/app.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+tsconfig = "tsconfig.json"
