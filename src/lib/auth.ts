@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { admin } from "better-auth/plugins";
 import type { Environment } from "@/env";
 
 export function createAuth(db: any, env: Environment) {
@@ -26,5 +27,10 @@ export function createAuth(db: any, env: Environment) {
         sameSite: "lax",
       },
     },
+    plugins: [
+      admin({
+        adminRoles: ["admin", "staff"], // Both admin and staff have admin-level permissions
+      }),
+    ],
   });
 }
