@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { pgTable, integer, varchar, timestamp, index } from 'drizzle-orm/pg-core';
-
+export * from './auth';
 // Test table
 export const testTable = pgTable('test_table', {
   id: integer('id').primaryKey().notNull().generatedAlwaysAsIdentity({ startWith: 1 }),

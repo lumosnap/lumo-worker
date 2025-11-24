@@ -59,9 +59,13 @@ export default function createApp() {
     }, HttpStatusCodes.UNAUTHORIZED)
   })
 
-  // CORS for all routes
+  // CORS for all routes (covers auth too)
   app.use('*', cors({
-    origin: '*',
+    origin: 'http://localhost:3000',
+    credentials: true,
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+    exposeHeaders: ['Set-Cookie'],
     maxAge: 2592000
   }))
 

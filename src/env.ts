@@ -8,7 +8,11 @@ const EnvSchema = z.object({
   SCALAR_OPENAPI_DOC_KEY: z.string().min(32).max(32),
   DATABASE_URL: z.string(),
   SUPABASE_URL: z.string().min(1).max(64),
-   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).max(512),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).max(512),
+  GOOGLE_CLIENT_ID: z.string().min(1).max(128),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).max(128),
+  BETTER_AUTH_SECRET: z.string().min(32).max(128),
+  BETTER_AUTH_URL: z.string().min(1).max(256),
 });
 
 export type Environment = z.infer<typeof EnvSchema>;
