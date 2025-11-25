@@ -28,29 +28,12 @@ export default function createApp() {
   app.use(serveEmojiFavicon("😎"));
   app.use(pinoLogger());
 
-  // Scalar OpenAPI documentation protection
-  app.use('/doc', async (c, next) => {
-    if (c.env.NODE_ENV === 'development') {
-      return next();
-    }
-    const secretKey = c.req.query('key');
-    if (secretKey === c.env.SCALAR_OPENAPI_DOC_KEY) {
-      return next();
-    }
-    return c.json({
-      success: false,
-      message: 'Unauthorized',
-    }, HttpStatusCodes.UNAUTHORIZED)
-  })
+  // Remove the /doc middleware completely ❌
 
-  // Scalar API reference protection
+  // Scalar API reference protection - simplified ✅
   app.use('/reference', async (c, next) => {
-    if (c.env.NODE_ENV === 'development') {
-      return next();
-    }
     const secretKey = c.req.query('key');
     if (secretKey === c.env.SCALAR_OPENAPI_CLIENT_KEY) {
-      c.set('secret', secretKey)
       return next();
     }
     return c.json({
@@ -59,7 +42,7 @@ export default function createApp() {
     }, HttpStatusCodes.UNAUTHORIZED)
   })
 
-  // CORS for all routes (covers auth too)
+  // CORS for all routes
   app.use('*', cors({
     origin: 'http://localhost:3000',
     credentials: true,

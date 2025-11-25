@@ -20,16 +20,6 @@ app.use('*', async (c, next) => {
 });
 
 configureOpenAPI(app);
-app.use('/reference', async (c, next) => {
-  const secretKey = c.req.query('key');
-  if (secretKey === c.env.SCALAR_OPENAPI_CLIENT_KEY) {
-    return next();
-  }
-  return c.json({
-    success: false,
-    message: 'Unauthorized',
-  }, HttpStatusCodes.UNAUTHORIZED)
-})
 // Mount Better Auth routes
 app.all("/api/auth/*", async (c) => {
   const { db } = createDb(c.env);
