@@ -1,6 +1,10 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, integer, varchar, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, integer, varchar, timestamp, index, serial, boolean, text, date, decimal, bigint, jsonb } from 'drizzle-orm/pg-core';
+
 export * from './auth';
+export * from './profiles';
+export * from './billing';
+export * from './albums';
 // Test table
 export const testTable = pgTable('test_table', {
   id: integer('id').primaryKey().notNull().generatedAlwaysAsIdentity({ startWith: 1 }),

@@ -4,12 +4,17 @@ import type { AppRouteHandler } from "@/lib/types";
 import { eq } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type { CreateTestRoute, GetTestRoute, ListTestsRoute } from "./hello.routes";
+import {useBackBlaze} from "@/lib/backblaze"
 
 // Get all tests
 export const listTests: AppRouteHandler<ListTestsRoute> = async (c) => {
   try {
 
     const { db } = createDb(c.env);
+
+    const {getSignedUrls} = await useBackBlaze(c.env);
+    const signedUrls = await getSignedUrls([{name: "test",filename:"test"}],"test-album");
+    console.log("Signed URLs:", signedUrls);
 
     const tests = await db.select().from(testTable);
  console.log("Fetching tests...",tests);

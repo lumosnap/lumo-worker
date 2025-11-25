@@ -16,7 +16,10 @@
     "build": "tsc && tsc-alias"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.939.0",
+    "@aws-sdk/s3-request-presigner": "^3.939.0",
     "@hono/zod-openapi": "^1.1.4",
+    "@paralleldrive/cuid2": "^3.0.4",
     "@scalar/hono-api-reference": "^0.9.22",
     "bcryptjs": "^3.0.2",
     "better-auth": "^1.4.1",
