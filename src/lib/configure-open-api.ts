@@ -59,9 +59,7 @@ export default function configureOpenAPI(app: AppOpenAPI) {
         targetKey: "js",
         clientKey: "fetch",
       },
-
-        url: "/doc?key=E$p7C$60qfhe*hhZeZD2BKhhvJ2Dxe*v",
-
+      url: "/doc",  // Remove the key from here
     }),
   );
 }
