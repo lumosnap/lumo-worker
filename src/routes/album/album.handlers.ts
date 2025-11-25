@@ -40,12 +40,32 @@ export const createAlbum: AppRouteHandler<CreateAlbumRoute> = async (c) => {
     const { db } = createDb(c.env);
     const body = c.req.valid("json");
     const id = createId()
+    
+    // Convert date strings to Date objects if they exist
+    const valuesToInsert: any = {
+      id,
+      title: body.title,
+    };
+    
+    if (body.userId !== undefined) {
+      valuesToInsert.userId = body.userId;
+    }
+    
+    if (body.eventDate !== undefined) {
+      valuesToInsert.eventDate = body.eventDate;
+    }
+    
+    if (body.expiresAt !== undefined) {
+      valuesToInsert.expiresAt = new Date(body.expiresAt);
+    }
+    
+    if (body.isPublic !== undefined) {
+      valuesToInsert.isPublic = body.isPublic;
+    }
+    
     const [newAlbum] = await db
       .insert(albums)
-      .values({
-        id,
-        ...body
-      })
+      .values(valuesToInsert)
       .returning();
 
     return c.json(

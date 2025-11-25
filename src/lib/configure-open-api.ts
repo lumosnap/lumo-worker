@@ -56,12 +56,12 @@ export default function configureOpenAPI(app: AppOpenAPI) {
       theme: "kepler",
       layout: "modern",
       defaultHttpClient: {
-        targetKey: "javascript",
+        targetKey: "js",
         clientKey: "fetch",
       },
-      spec: {
+
         url: "/doc?key=E$p7C$60qfhe*hhZeZD2BKhhvJ2Dxe*v",
-      },
+
     }),
   );
 }

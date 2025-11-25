@@ -2,7 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
-// Schema for test response
+// Schema for single test response
 const testResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
@@ -15,6 +15,19 @@ const testResponseSchema = z.object({
   }).optional(),
 });
 
+// Schema for multiple tests response
+const testsResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(z.object({
+    id: z.number(),
+    name: z.string(),
+    email: z.string().nullable(),
+    message: z.string().nullable(),
+    createdAt: z.string(),
+  })).optional(),
+});
+
 // GET all tests
 export const listTestsRoute = createRoute({
   tags: ["Hello"],
@@ -24,8 +37,15 @@ export const listTestsRoute = createRoute({
   path: "/hello",
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
-      testResponseSchema,
+      testsResponseSchema,
       "Test entries retrieved successfully",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
     ),
   },
 });
@@ -54,6 +74,13 @@ export const getTestRoute = createRoute({
       }),
       "Test entry not found",
     ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
   },
 });
 
@@ -78,6 +105,13 @@ export const createTestRoute = createRoute({
     [HttpStatusCodes.CREATED]: jsonContent(
       testResponseSchema,
       "Test entry created successfully",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
     ),
   },
 });

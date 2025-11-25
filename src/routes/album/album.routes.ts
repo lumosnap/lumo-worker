@@ -12,7 +12,7 @@ const albumSchema = z.object({
   totalSize: z.number().nullable(),
   shareLinkToken: z.string().nullable(),
   expiresAt: z.string().datetime().nullable(),
-  isPublic: z.boolean(),
+  isPublic: z.boolean().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -65,6 +65,13 @@ export const listAlbumsRoute = createRoute({
       albumListResponseSchema,
       "Album entries retrieved successfully",
     ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
   },
 });
 
@@ -85,6 +92,13 @@ export const createAlbumRoute = createRoute({
     [HttpStatusCodes.CREATED]: jsonContent(
       singleAlbumResponseSchema,
       "Album entry created successfully",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
     ),
   },
 });
@@ -112,6 +126,13 @@ export const generateUploadUrlRoute = createRoute({
     [HttpStatusCodes.CREATED]: jsonContent(
       generateUploadUrlResponseSchema,
       "Upload URLs created successfully",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
     ),
   },
 })
