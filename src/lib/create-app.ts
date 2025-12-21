@@ -39,9 +39,9 @@ export default function createApp() {
       ].filter(Boolean);
       
       // Allow requests with no origin (like mobile apps or curl)
-      if (!origin) return true;
+      if (!origin) return undefined;
       
-      return allowedOrigins.includes(origin);
+      return allowedOrigins.includes(origin) ? origin : undefined;
     },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],

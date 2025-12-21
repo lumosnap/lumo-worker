@@ -444,7 +444,7 @@ export const getAlbumFavoritesRoute = createRoute({
     }),
     query: z.object({
       clientName: z.string().optional().describe("Filter favorites by client name"),
-    }).optional(),
+    }),
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(

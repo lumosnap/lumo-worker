@@ -224,7 +224,7 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
   try {
     const { db } = createDb(c.env);
     const { albumId } = c.req.valid("param");
-    const query = c.req.valid("query");
+    const query = c.req.valid("query") || {};
     const { getPublicUrl } = await useBackBlaze(c.env);
 
     // Check if album exists
@@ -243,8 +243,16 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
       );
     }
 
-    // Build the query for favorites
-    let favoritesQuery = db
+    // Build the base conditions
+    const conditions = [eq(favorites.albumId, albumId)];
+    
+    // Add client name filter if provided
+    if (query.clientName) {
+      conditions.push(eq(favorites.clientName, query.clientName));
+    }
+
+    // Query favorites with image details
+    const albumFavorites = await db
       .select({
         id: favorites.id,
         albumId: favorites.albumId,
@@ -270,19 +278,8 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
       })
       .from(favorites)
       .leftJoin(images, eq(favorites.imageId, images.id))
-      .where(eq(favorites.albumId, albumId));
-
-    // Filter by client name if provided
-    if (query?.clientName) {
-      favoritesQuery = favoritesQuery.where(
-        and(
-          eq(favorites.albumId, albumId),
-          eq(favorites.clientName, query.clientName)
-        )
-      );
-    }
-
-    const albumFavorites = await favoritesQuery.orderBy(desc(favorites.createdAt));
+      .where(and(...conditions))
+      .orderBy(desc(favorites.createdAt));
 
     // Add image URLs to the favorites
     const favoritesWithUrls = albumFavorites.map(favorite => {
@@ -356,11 +353,17 @@ export const createAlbum: AppRouteHandler<CreateAlbumRoute> = async (c) => {
       .values(valuesToInsert)
       .returning();
 
+    // Add preview_link field (null for new albums)
+    const albumResponse = {
+      ...newAlbum,
+      preview_link: null,
+    };
+
     return c.json(
       {
         success: true,
         message: "Album entry created successfully",
-        data: newAlbum,
+        data: albumResponse,
       },
       HttpStatusCodes.CREATED
     );
@@ -463,7 +466,7 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
       .update(albums)
       .set({
         totalImages: album.totalImages + savedImages.length,
-        totalSize: album.totalSize + totalSize,
+        totalSize: (album.totalSize || 0) + totalSize,
         shareLinkToken: shareToken,
         updatedAt: new Date(),
       })
@@ -532,7 +535,19 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
       const imageKey = image.b2FileName;
       const thumbnailKey = image.thumbnailB2FileName;
       return {
-        ...image,
+        id: image.id,
+        albumId: image.albumId || albumId, // Ensure albumId is a string
+        b2FileId: image.b2FileId,
+        b2FileName: image.b2FileName,
+        originalFilename: image.originalFilename,
+        fileSize: image.fileSize,
+        width: image.width,
+        height: image.height,
+        uploadOrder: image.uploadOrder,
+        uploadStatus: image.uploadStatus || 'complete', // Ensure uploadStatus is not null
+        thumbnailB2FileId: image.thumbnailB2FileId,
+        thumbnailB2FileName: image.thumbnailB2FileName,
+        createdAt: image.createdAt,
         url: imageKey ? getPublicUrl(imageKey) : null,
         thumbnailUrl: thumbnailKey ? getPublicUrl(thumbnailKey) : null,
       };
