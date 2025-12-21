@@ -1,0 +1,409 @@
+import { createDb } from "@/db";
+import { profiles, billingAddresses } from "@/db/schema/profiles";
+import type { AppRouteHandler } from "@/lib/types";
+import { eq, and } from "drizzle-orm";
+import * as HttpStatusCodes from "stoker/http-status-codes";
+import type { 
+  GetProfileRoute, 
+  UpdateProfileRoute, 
+  GetBillingAddressesRoute,
+  CreateBillingAddressRoute,
+  UpdateBillingAddressRoute,
+  DeleteBillingAddressRoute
+} from "./profile.routes";
+
+export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
+  try {
+    const { db } = createDb(c.env);
+    
+    // Get user ID from session (this would come from auth middleware)
+    const userId = c.get('user')?.id;
+    if (!userId) {
+      return c.json(
+        {
+          success: false,
+          message: "User not authenticated",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
+    const [profile] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.userId, userId));
+
+    if (!profile) {
+      return c.json(
+        {
+          success: false,
+          message: "Profile not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    return c.json(
+      {
+        success: true,
+        message: "Profile retrieved successfully",
+        data: profile,
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem retrieving profile",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const updateProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
+  try {
+    const { db } = createDb(c.env);
+    const body = c.req.valid("json");
+    
+    // Get user ID from session
+    const userId = c.get('user')?.id;
+    if (!userId) {
+      return c.json(
+        {
+          success: false,
+          message: "User not authenticated",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
+    // Check if profile exists
+    const [existingProfile] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.userId, userId));
+
+    if (!existingProfile) {
+      return c.json(
+        {
+          success: false,
+          message: "Profile not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // Update profile
+    const [updatedProfile] = await db
+      .update(profiles)
+      .set({
+        ...body,
+        updatedAt: new Date(),
+      })
+      .where(eq(profiles.userId, userId))
+      .returning();
+
+    return c.json(
+      {
+        success: true,
+        message: "Profile updated successfully",
+        data: updatedProfile,
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem updating profile",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const getBillingAddresses: AppRouteHandler<GetBillingAddressesRoute> = async (c) => {
+  try {
+    const { db } = createDb(c.env);
+    
+    // Get user ID from session
+    const userId = c.get('user')?.id;
+    if (!userId) {
+      return c.json(
+        {
+          success: false,
+          message: "User not authenticated",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
+    // First get the profile ID
+    const [profile] = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.userId, userId));
+
+    if (!profile) {
+      return c.json(
+        {
+          success: false,
+          message: "Profile not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // Get billing addresses
+    const addresses = await db
+      .select()
+      .from(billingAddresses)
+      .where(eq(billingAddresses.userId, profile.id))
+      .orderBy(billingAddresses.isDefault ? 0 : 1, billingAddresses.createdAt);
+
+    return c.json(
+      {
+        success: true,
+        message: "Billing addresses retrieved successfully",
+        data: addresses,
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem retrieving billing addresses",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const createBillingAddress: AppRouteHandler<CreateBillingAddressRoute> = async (c) => {
+  try {
+    const { db } = createDb(c.env);
+    const body = c.req.valid("json");
+    
+    // Get user ID from session
+    const userId = c.get('user')?.id;
+    if (!userId) {
+      return c.json(
+        {
+          success: false,
+          message: "User not authenticated",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
+    // Get profile ID
+    const [profile] = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.userId, userId));
+
+    if (!profile) {
+      return c.json(
+        {
+          success: false,
+          message: "Profile not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // If this is set as default, unset all other addresses
+    if (body.isDefault) {
+      await db
+        .update(billingAddresses)
+        .set({ isDefault: false })
+        .where(eq(billingAddresses.userId, profile.id));
+    }
+
+    // Create billing address
+    const [newAddress] = await db
+      .insert(billingAddresses)
+      .values({
+        userId: profile.id,
+        ...body,
+      })
+      .returning();
+
+    return c.json(
+      {
+        success: true,
+        message: "Billing address created successfully",
+        data: newAddress,
+      },
+      HttpStatusCodes.CREATED
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem creating billing address",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const updateBillingAddress: AppRouteHandler<UpdateBillingAddressRoute> = async (c) => {
+  try {
+    const { db } = createDb(c.env);
+    const { addressId } = c.req.valid("param");
+    const body = c.req.valid("json");
+    
+    // Get user ID from session
+    const userId = c.get('user')?.id;
+    if (!userId) {
+      return c.json(
+        {
+          success: false,
+          message: "User not authenticated",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
+    // Get profile ID
+    const [profile] = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.userId, userId));
+
+    if (!profile) {
+      return c.json(
+        {
+          success: false,
+          message: "Profile not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // Check if address exists and belongs to user
+    const [existingAddress] = await db
+      .select()
+      .from(billingAddresses)
+      .where(and(eq(billingAddresses.id, parseInt(addressId)), eq(billingAddresses.userId, profile.id)));
+
+    if (!existingAddress) {
+      return c.json(
+        {
+          success: false,
+          message: "Billing address not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // If this is set as default, unset all other addresses
+    if (body.isDefault) {
+      await db
+        .update(billingAddresses)
+        .set({ isDefault: false })
+        .where(and(eq(billingAddresses.userId, profile.id)));
+    }
+
+    // Update address
+    const [updatedAddress] = await db
+      .update(billingAddresses)
+      .set(body)
+      .where(and(eq(billingAddresses.id, parseInt(addressId)), eq(billingAddresses.userId, profile.id)))
+      .returning();
+
+    return c.json(
+      {
+        success: true,
+        message: "Billing address updated successfully",
+        data: updatedAddress,
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem updating billing address",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const deleteBillingAddress: AppRouteHandler<DeleteBillingAddressRoute> = async (c) => {
+  try {
+    const { db } = createDb(c.env);
+    const { addressId } = c.req.valid("param");
+    
+    // Get user ID from session
+    const userId = c.get('user')?.id;
+    if (!userId) {
+      return c.json(
+        {
+          success: false,
+          message: "User not authenticated",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
+    // Get profile ID
+    const [profile] = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.userId, userId));
+
+    if (!profile) {
+      return c.json(
+        {
+          success: false,
+          message: "Profile not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // Delete address (only if it belongs to user)
+    const result = await db
+      .delete(billingAddresses)
+      .where(and(eq(billingAddresses.id, parseInt(addressId)), eq(billingAddresses.userId, profile.id)))
+      .returning();
+
+    if (result.length === 0) {
+      return c.json(
+        {
+          success: false,
+          message: "Billing address not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    return c.json(
+      {
+        success: true,
+        message: "Billing address deleted successfully",
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem deleting billing address",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};

@@ -17,6 +17,7 @@ const EnvSchema = z.object({
   BACKBLAZE_API_KEY: z.string().min(1).max(128),
   BACKBLAZE_BUCKET_ID: z.string().min(1).max(128),
   BACKBLAZE_BUCKET_NAME: z.string().min(1).max(128),
+  WEB_DOMAIN:z.string()
 });
 
 export type Environment = z.infer<typeof EnvSchema>;

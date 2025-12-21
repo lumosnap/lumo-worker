@@ -7,7 +7,9 @@ export interface AppBindings {
   Bindings: Environment;
   Variables: {
     logger: PinoLogger;
-    secret: any
+    secret: any;
+    user: any; // Better Auth user type
+    session: any; // Better Auth session type
   };
 };
 

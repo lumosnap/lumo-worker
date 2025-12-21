@@ -15,6 +15,7 @@ const albumSchema = z.object({
   isPublic: z.boolean().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  preview_link: z.string().url().nullable(),
 });
 
 const createAlbumSchema = z.object({
@@ -47,11 +48,164 @@ const generateUploadUrlResponseSchema = z.object({
     })).optional()
 })
 
+const confirmUploadSchema = z.object({
+    images: z.array(z.object({
+        filename: z.string(),
+        b2FileId: z.string(),
+        fileSize: z.number(),
+        width: z.number(),
+        height: z.number(),
+        uploadOrder: z.number(),
+        thumbnailB2FileId: z.string().optional(),
+        thumbnailB2FileName: z.string().optional(),
+    }))
+});
+
+const confirmUploadResponseSchema = z.object({
+    success: z.boolean(),
+    message: z.string(),
+    data: z.array(z.object({
+        id: z.number(),
+        originalFilename: z.string(),
+        b2FileName: z.string(),
+    })).optional()
+})
+
+const imageSchema = z.object({
+  id: z.number(),
+  albumId: z.string(),
+  b2FileId: z.string(),
+  b2FileName: z.string(),
+  originalFilename: z.string(),
+  fileSize: z.number(),
+  width: z.number(),
+  height: z.number(),
+  uploadOrder: z.number(),
+  uploadStatus: z.enum(['pending', 'uploading', 'complete', 'failed']),
+  thumbnailB2FileId: z.string().optional(),
+  thumbnailB2FileName: z.string().optional(),
+  createdAt: z.string().datetime(),
+  url: z.string().url().nullable(),
+  thumbnailUrl: z.string().url().nullable(),
+});
+
+const albumWithImagesSchema = z.object({
+  id: z.string(),
+  userId: z.number().int().nullable(),
+  title: z.string(),
+  eventDate: z.string().nullable(),
+  totalImages: z.number().int(),
+  totalSize: z.number().nullable(),
+  shareLinkToken: z.string().nullable(),
+  expiresAt: z.string().datetime().nullable(),
+  isPublic: z.boolean().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  preview_link: z.string().url().nullable(),
+  images: z.array(imageSchema),
+});
+
+const albumImagesResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: albumWithImagesSchema.optional(),
+});
+
+const deleteImageResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+
+const bulkDeleteImagesSchema = z.object({
+  imageIds: z.array(z.number().int()).min(1),
+});
+
+const bulkDeleteImagesResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    deletedCount: z.number(),
+    failedCount: z.number(),
+  }).optional(),
+});
+
+const favoriteSchema = z.object({
+  id: z.number(),
+  albumId: z.string(),
+  imageId: z.number(),
+  clientName: z.string(),
+  notes: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  image: imageSchema.optional(),
+});
+
+const favoritesResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(favoriteSchema).optional(),
+});
+
+const createShareLinkResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    shareLink: z.string().url(),
+    shareLinkToken: z.string(),
+  }).optional(),
+});
+
+const shareLinkExistsResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({
+    shareLink: z.string().url(),
+    shareLinkToken: z.string(),
+  }).optional(),
+});
+
 
 // ==================================================
 // Routes
 // ==================================================
 
+
+// POST create or get share link
+export const createShareLinkRoute = createRoute({
+  tags: ["Albums"],
+  method: "post",
+  summary: "Create or get share link",
+  description: "Create a new share link for an album or return existing one",
+  path: "/albums/:albumId/share-link",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      createShareLinkResponseSchema,
+      "Share link created or retrieved successfully",
+    ),
+    [HttpStatusCodes.CREATED]: jsonContent(
+      createShareLinkResponseSchema,
+      "Share link created successfully",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Album not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+});
 
 // GET all albums
 export const listAlbumsRoute = createRoute({
@@ -137,6 +291,223 @@ export const generateUploadUrlRoute = createRoute({
   },
 })
 
+export const confirmUploadRoute = createRoute({
+  tags: ["Albums"],
+  method: "post",
+  summary: "Confirm upload completion",
+  description: "Save upload metadata after files are successfully uploaded to storage.",
+  path: "/albums/:albumId/confirm-upload",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+    body: jsonContent(
+      confirmUploadSchema,
+      "Upload metadata to save",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      confirmUploadResponseSchema,
+      "Upload metadata saved successfully",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Album not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+})
+
+export const getAlbumImagesRoute = createRoute({
+  tags: ["Albums"],
+  method: "get",
+  summary: "Get album with images",
+  description: "Retrieve an album and all its images (authenticated users only)",
+  path: "/albums/:albumId/images",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      albumImagesResponseSchema,
+      "Album and images retrieved successfully",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Album not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+});
+
+export const deleteImageRoute = createRoute({
+  tags: ["Albums"],
+  method: "delete",
+  summary: "Delete image",
+  description: "Delete a specific image from an album",
+  path: "/albums/:albumId/images/:imageId",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+      imageId: z.string().transform(val => parseInt(val)),
+    }),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      deleteImageResponseSchema,
+      "Image deleted successfully",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Album or image not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+});
+
+export const bulkDeleteImagesRoute = createRoute({
+  tags: ["Albums"],
+  method: "delete",
+  summary: "Delete multiple images",
+  description: "Delete multiple images from an album",
+  path: "/albums/:albumId/images",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+    body: jsonContent(
+      bulkDeleteImagesSchema,
+      "Array of image IDs to delete",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      bulkDeleteImagesResponseSchema,
+      "Images deleted successfully",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Album not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+});
+
+export const getAlbumFavoritesRoute = createRoute({
+  tags: ["Albums"],
+  method: "get",
+  summary: "Get album favorites",
+  description: "Retrieve all favorites for an album with image details",
+  path: "/albums/:albumId/favorites",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+    query: z.object({
+      clientName: z.string().optional().describe("Filter favorites by client name"),
+    }).optional(),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      favoritesResponseSchema,
+      "Favorites retrieved successfully",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Album not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+});
+
+export const deleteAlbumRoute = createRoute({
+  tags: ["Albums"],
+  method: "delete",
+  summary: "Delete album",
+  description: "Delete an album and all its images (including files from B2 storage)",
+  path: "/albums/:albumId",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      deleteImageResponseSchema,
+      "Album deleted successfully",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Album not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+});
+
+export type CreateShareLinkRoute = typeof createShareLinkRoute;
 export type ListAlbumsRoute = typeof listAlbumsRoute;
 export type CreateAlbumRoute = typeof createAlbumRoute;
 export type GenerateUploadUrlRoute = typeof generateUploadUrlRoute;
+export type ConfirmUploadRoute = typeof confirmUploadRoute;
+export type GetAlbumImagesRoute = typeof getAlbumImagesRoute;
+export type DeleteImageRoute = typeof deleteImageRoute;
+export type BulkDeleteImagesRoute = typeof bulkDeleteImagesRoute;
+export type GetAlbumFavoritesRoute = typeof getAlbumFavoritesRoute;
+export type DeleteAlbumRoute = typeof deleteAlbumRoute;

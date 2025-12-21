@@ -2,7 +2,7 @@ import { pgTable, varchar, integer, timestamp, index, date, bigint, boolean, ser
 import { profiles } from './profiles';
 
 export const albums = pgTable("albums", {
-  id: varchar("id", { length: 21 }).primaryKey(),
+  id: varchar("id", { length: 25 }).primaryKey(),
   userId: integer("user_id").references(() => profiles.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 255 }).notNull(),
   eventDate: date("event_date"),
@@ -24,7 +24,7 @@ export const uploadStatusEnum = pgEnum('upload_status', ['pending', 'uploading',
 
 export const images = pgTable("images", {
   id: serial("id").primaryKey(),
-  albumId: varchar("album_id", { length: 21 }).references(() => albums.id, { onDelete: "cascade" }),
+  albumId: varchar("album_id", { length: 25 }).references(() => albums.id, { onDelete: "cascade" }),
   b2FileId: varchar("b2_file_id", { length: 255 }).notNull(),
   b2FileName: varchar("b2_file_name", { length: 500 }).notNull(),
   originalFilename: varchar("original_filename", { length: 255 }).notNull(),
@@ -46,7 +46,7 @@ export const images = pgTable("images", {
 
 export const favorites = pgTable("favorites", {
   id: serial("id").primaryKey(),
-  albumId: varchar("album_id", { length: 21 }).references(() => albums.id, { onDelete: "cascade" }),
+  albumId: varchar("album_id", { length: 25 }).references(() => albums.id, { onDelete: "cascade" }),
   imageId: integer("image_id").references(() => images.id, { onDelete: "cascade" }),
   clientName: varchar("client_name", { length: 255 }).notNull(),
   notes: text("notes"),

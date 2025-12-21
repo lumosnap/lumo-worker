@@ -11,11 +11,6 @@ export const listTests: AppRouteHandler<ListTestsRoute> = async (c) => {
   try {
 
     const { db } = createDb(c.env);
-
-    const {getSignedUrls} = await useBackBlaze(c.env);
-    const signedUrls = await getSignedUrls([{filename:"test"}],"test-album");
-    console.log("Signed URLs:", signedUrls);
-
     const tests = await db.select().from(testTable);
  console.log("Fetching tests...",tests);
 

@@ -4,6 +4,9 @@ import { expand } from "dotenv-expand";
 import createApp from "@/lib/create-app";
 import hello from "@/routes/hello/hello.index";
 import album from "@/routes/album/album.index";
+import publicRoutes from "@/routes/public/public.index";
+import profile from "@/routes/profile/profile.index";
+import billing from "@/routes/billing/billing.index";
 import index from "@/routes/index.route";
 import { createAuth } from "@/lib/auth";
 import { createDb } from "@/db";
@@ -16,7 +19,9 @@ const app = createApp();
 // Logging middleware to trace incoming requests
 app.use('*', async (c, next) => {
   console.log(`[${c.req.method}] ${c.req.url}`);
+  console.log('Request path:', c.req.path);
   await next();
+  console.log('Response status:', c.res.status);
 });
 
 configureOpenAPI(app);
@@ -31,6 +36,9 @@ const routes = [
   index,
   hello,
   album,
+  publicRoutes,
+  profile,
+  billing,
 ] as const;
 
 routes.forEach((route) => {

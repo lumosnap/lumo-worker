@@ -1,7 +1,7 @@
 import type { Environment } from "@/env";
 
 export const useBackBlaze = async (env: Environment) => {
-  const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+  const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
   const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
 
   const s3Client = new S3Client({
@@ -35,7 +35,24 @@ export const useBackBlaze = async (env: Environment) => {
     return uploadUrls;
   };
 
+  const getPublicUrl = (key: string, isThumbnail = false) => {
+    // For B2 S3 Compatible API, the public URL format is: https://s3.region.backblazeb2.com/bucket-name/key
+    const bucketName = env.BACKBLAZE_BUCKET_NAME;
+    const region = 'eu-central-003';
+    return `https://s3.${region}.backblazeb2.com/${bucketName}/${key}`;
+  };
+
+  const deleteFile = async (fileId: string) => {
+    const command = new DeleteObjectCommand({
+      Bucket: env.BACKBLAZE_BUCKET_NAME,
+      Key: fileId,
+    });
+    return await s3Client.send(command);
+  };
+
   return {
     getSignedUrls,
+    getPublicUrl,
+    deleteFile,
   };
 };
