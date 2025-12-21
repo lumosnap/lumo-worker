@@ -31,7 +31,18 @@ export default function createApp() {
 
   // CORS for all routes (placed before auth middleware)
   app.use('*', cors({
-    origin: ['http://localhost:3000', 'http://localhost:5173'],
+    origin: (origin, c) => {
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        c.env.WEB_DOMAIN
+      ].filter(Boolean);
+      
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return true;
+      
+      return allowedOrigins.includes(origin);
+    },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowHeaders: ['Content-Type', 'Authorization', 'User-Agent', 'Accept', 'Accept-Encoding', 'Accept-Language', 'Referer', 'Origin'],
