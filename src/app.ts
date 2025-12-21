@@ -16,14 +16,6 @@ expand(config());
 
 const app = createApp();
 
-// Logging middleware to trace incoming requests
-app.use('*', async (c, next) => {
-  console.log(`[${c.req.method}] ${c.req.url}`);
-  console.log('Request path:', c.req.path);
-  await next();
-  console.log('Response status:', c.res.status);
-});
-
 configureOpenAPI(app);
 // Mount Better Auth routes
 app.all("/api/auth/*", async (c) => {

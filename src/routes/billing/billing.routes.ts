@@ -2,22 +2,28 @@ import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
+// Shared error response schema
+const errorResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+
 const planSchema = z.object({
   id: z.number(),
   name: z.enum(["free", "pro", "business"]),
   displayName: z.string(),
-  priceMonthly: z.number(),
+  priceMonthly: z.string().nullable(), // DB stores as decimal string
   storageLimit: z.number().nullable(),
   maxAlbums: z.number().nullable(),
   features: z.any(),
-  isActive: z.boolean(),
+  isActive: z.boolean().nullable(),
   createdAt: z.string().datetime(),
 });
 
 const subscriptionSchema = z.object({
   id: z.number(),
-  userId: z.string(),
-  planId: z.number(),
+  userId: z.string().nullable(),
+  planId: z.number().nullable(),
   status: z.enum(["active", "cancelled", "past_due"]),
   currentPeriodStart: z.string().datetime(),
   currentPeriodEnd: z.string().datetime(),
@@ -27,7 +33,7 @@ const subscriptionSchema = z.object({
 });
 
 const subscriptionWithPlanSchema = subscriptionSchema.extend({
-  plan: planSchema.omit({ createdAt: true, isActive: true }),
+  plan: planSchema.omit({ createdAt: true, isActive: true }).nullable(),
 });
 
 const createSubscriptionSchema = z.object({
@@ -89,18 +95,16 @@ export const getSubscriptionRoute = createRoute({
       subscriptionResponseSchema,
       "Subscription retrieved successfully",
     ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Subscription not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -124,18 +128,16 @@ export const createSubscriptionRoute = createRoute({
       subscriptionResponseSchema,
       "Subscription created successfully",
     ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
     [HttpStatusCodes.BAD_REQUEST]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Bad request",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -159,18 +161,20 @@ export const updateSubscriptionRoute = createRoute({
       subscriptionResponseSchema,
       "Subscription updated successfully",
     ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
+    [HttpStatusCodes.BAD_REQUEST]: jsonContent(
+      errorResponseSchema,
+      "Invalid plan",
+    ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Subscription not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -185,24 +189,19 @@ export const cancelSubscriptionRoute = createRoute({
   path: "/billing/subscription",
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Subscription cancelled successfully",
     ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Subscription not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },

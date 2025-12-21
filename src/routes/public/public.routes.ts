@@ -15,8 +15,8 @@ const imageSchema = z.object({
 
 const favoriteSchema = z.object({
   id: z.number(),
-  albumId: z.string(),
-  imageId: z.number(),
+  albumId: z.string().nullable(),
+  imageId: z.number().nullable(),
   clientName: z.string(),
   notes: z.string().nullable(),
   createdAt: z.string().datetime(),
@@ -73,7 +73,7 @@ export const getAlbumByTokenRoute = createRoute({
             title: z.string(),
             eventDate: z.string().nullable(),
             totalImages: z.number(),
-            shareLinkToken: z.string(),
+            shareLinkToken: z.string().nullable(),
           }),
           images: z.array(imageSchema),
           pagination: z.object({

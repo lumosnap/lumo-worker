@@ -245,7 +245,7 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
 
     // Build the base conditions
     const conditions = [eq(favorites.albumId, albumId)];
-    
+
     // Add client name filter if provided
     if (query.clientName) {
       conditions.push(eq(favorites.clientName, query.clientName));
@@ -287,7 +287,7 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
 
       const imageKey = favorite.image.b2FileName;
       const thumbnailKey = favorite.image.thumbnailB2FileName;
-      
+
       return {
         ...favorite,
         image: {
@@ -321,33 +321,42 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
 // Create album
 export const createAlbum: AppRouteHandler<CreateAlbumRoute> = async (c) => {
   try {
+    // Get authenticated user
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
     const { createId } = await import('@paralleldrive/cuid2');
     const { db } = createDb(c.env);
     const body = c.req.valid("json");
     const id = createId()
-    
-    // Convert date strings to Date objects if they exist
+
+    // Use the authenticated user's ID, not the request body
     const valuesToInsert: any = {
       id,
       title: body.title,
+      userId: user.id,  // Always use authenticated user's ID
     };
-    
-    if (body.userId !== undefined) {
-      valuesToInsert.userId = body.userId;
-    }
-    
+
     if (body.eventDate !== undefined) {
       valuesToInsert.eventDate = body.eventDate;
     }
-    
+
     if (body.expiresAt !== undefined) {
       valuesToInsert.expiresAt = new Date(body.expiresAt);
     }
-    
+
     if (body.isPublic !== undefined) {
       valuesToInsert.isPublic = body.isPublic;
     }
-    
+
     const [newAlbum] = await db
       .insert(albums)
       .values(valuesToInsert)
@@ -454,14 +463,14 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
 
     // Update album statistics - need to get fileSize from uploadedImages since we didn't return it
     const totalSize = uploadedImages.reduce((sum, img) => sum + img.fileSize, 0);
-    
+
     // Generate share token if not exists
     let shareToken = album.shareLinkToken;
     if (!shareToken) {
       const { createId } = await import('@paralleldrive/cuid2');
       shareToken = createId();
     }
-    
+
     await db
       .update(albums)
       .set({
@@ -638,7 +647,7 @@ export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
     // Update album statistics
     const newTotalImages = Math.max(0, album.totalImages - 1);
     const newTotalSize = Math.max(0, (album.totalSize || 0) - image.fileSize);
-    
+
     await db
       .update(albums)
       .set({
@@ -717,7 +726,7 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
 
         // Delete image from database
         await db.delete(images).where(eq(images.id, image.id));
-        
+
         deletedCount++;
         totalSizeReduced += image.fileSize;
       } catch (deleteError) {
@@ -729,7 +738,7 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
     // Update album statistics
     const newTotalImages = Math.max(0, album.totalImages - deletedCount);
     const newTotalSize = Math.max(0, (album.totalSize || 0) - totalSizeReduced);
-    
+
     await db
       .update(albums)
       .set({

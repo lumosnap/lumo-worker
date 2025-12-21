@@ -4,7 +4,6 @@ import type { AppRouteHandler } from "@/lib/types";
 import { eq } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type { CreateTestRoute, GetTestRoute, ListTestsRoute } from "./hello.routes";
-import {useBackBlaze} from "@/lib/backblaze"
 
 // Get all tests
 export const listTests: AppRouteHandler<ListTestsRoute> = async (c) => {
@@ -12,7 +11,6 @@ export const listTests: AppRouteHandler<ListTestsRoute> = async (c) => {
 
     const { db } = createDb(c.env);
     const tests = await db.select().from(testTable);
- console.log("Fetching tests...",tests);
 
     return c.json(
       {

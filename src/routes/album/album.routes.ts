@@ -33,47 +33,47 @@ const singleAlbumResponseSchema = z.object({
 });
 
 const albumListResponseSchema = z.object({
-    success: z.boolean(),
-    message: z.string(),
-    data: z.array(albumSchema).optional(),
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(albumSchema).optional(),
 });
 
 const generateUploadUrlResponseSchema = z.object({
-    success: z.boolean(),
-    message: z.string(),
-    data: z.array(z.object({
-        filename: z.string(),
-        uploadUrl: z.string().url(),
-        key: z.string(),
-    })).optional()
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(z.object({
+    filename: z.string(),
+    uploadUrl: z.string().url(),
+    key: z.string(),
+  })).optional()
 })
 
 const confirmUploadSchema = z.object({
-    images: z.array(z.object({
-        filename: z.string(),
-        b2FileId: z.string(),
-        fileSize: z.number(),
-        width: z.number(),
-        height: z.number(),
-        uploadOrder: z.number(),
-        thumbnailB2FileId: z.string().optional(),
-        thumbnailB2FileName: z.string().optional(),
-    }))
+  images: z.array(z.object({
+    filename: z.string(),
+    b2FileId: z.string(),
+    fileSize: z.number(),
+    width: z.number(),
+    height: z.number(),
+    uploadOrder: z.number(),
+    thumbnailB2FileId: z.string().nullable().optional(),
+    thumbnailB2FileName: z.string().nullable().optional(),
+  }))
 });
 
 const confirmUploadResponseSchema = z.object({
-    success: z.boolean(),
-    message: z.string(),
-    data: z.array(z.object({
-        id: z.number(),
-        originalFilename: z.string(),
-        b2FileName: z.string(),
-    })).optional()
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(z.object({
+    id: z.number(),
+    originalFilename: z.string(),
+    b2FileName: z.string(),
+  })).optional()
 })
 
 const imageSchema = z.object({
   id: z.number(),
-  albumId: z.string(),
+  albumId: z.string().nullable(),
   b2FileId: z.string(),
   b2FileName: z.string(),
   originalFilename: z.string(),
@@ -81,12 +81,12 @@ const imageSchema = z.object({
   width: z.number(),
   height: z.number(),
   uploadOrder: z.number(),
-  uploadStatus: z.enum(['pending', 'uploading', 'complete', 'failed']),
-  thumbnailB2FileId: z.string().optional(),
-  thumbnailB2FileName: z.string().optional(),
+  uploadStatus: z.enum(['pending', 'uploading', 'complete', 'failed']).nullable(),
+  thumbnailB2FileId: z.string().nullable(),
+  thumbnailB2FileName: z.string().nullable(),
   createdAt: z.string().datetime(),
-  url: z.string().url().nullable(),
-  thumbnailUrl: z.string().url().nullable(),
+  url: z.string().url().nullable().optional(),
+  thumbnailUrl: z.string().url().nullable().optional(),
 });
 
 const albumWithImagesSchema = z.object({
@@ -131,12 +131,12 @@ const bulkDeleteImagesResponseSchema = z.object({
 
 const favoriteSchema = z.object({
   id: z.number(),
-  albumId: z.string(),
-  imageId: z.number(),
+  albumId: z.string().nullable(),
+  imageId: z.number().nullable(),
   clientName: z.string(),
   notes: z.string().nullable(),
   createdAt: z.string().datetime(),
-  image: imageSchema.optional(),
+  image: imageSchema.nullable().optional(),
 });
 
 const favoritesResponseSchema = z.object({
@@ -246,6 +246,13 @@ export const createAlbumRoute = createRoute({
     [HttpStatusCodes.CREATED]: jsonContent(
       singleAlbumResponseSchema,
       "Album entry created successfully",
+    ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "User not authenticated",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
       z.object({

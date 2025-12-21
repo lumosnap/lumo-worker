@@ -1,11 +1,11 @@
 import { createDb } from "@/db";
 import { profiles, billingAddresses } from "@/db/schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
-import type { 
-  GetProfileRoute, 
-  UpdateProfileRoute, 
+import type {
+  GetProfileRoute,
+  UpdateProfileRoute,
   GetBillingAddressesRoute,
   CreateBillingAddressRoute,
   UpdateBillingAddressRoute,
@@ -15,7 +15,7 @@ import type {
 export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
   try {
     const { db } = createDb(c.env);
-    
+
     // Get user ID from session (this would come from auth middleware)
     const userId = c.get('user')?.id;
     if (!userId) {
@@ -67,7 +67,7 @@ export const updateProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
   try {
     const { db } = createDb(c.env);
     const body = c.req.valid("json");
-    
+
     // Get user ID from session
     const userId = c.get('user')?.id;
     if (!userId) {
@@ -129,7 +129,7 @@ export const updateProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
 export const getBillingAddresses: AppRouteHandler<GetBillingAddressesRoute> = async (c) => {
   try {
     const { db } = createDb(c.env);
-    
+
     // Get user ID from session
     const userId = c.get('user')?.id;
     if (!userId) {
@@ -163,7 +163,7 @@ export const getBillingAddresses: AppRouteHandler<GetBillingAddressesRoute> = as
       .select()
       .from(billingAddresses)
       .where(eq(billingAddresses.userId, profile.id))
-      .orderBy(billingAddresses.isDefault ? 0 : 1, billingAddresses.createdAt);
+      .orderBy(desc(billingAddresses.isDefault), desc(billingAddresses.createdAt));
 
     return c.json(
       {
@@ -189,7 +189,7 @@ export const createBillingAddress: AppRouteHandler<CreateBillingAddressRoute> = 
   try {
     const { db } = createDb(c.env);
     const body = c.req.valid("json");
-    
+
     // Get user ID from session
     const userId = c.get('user')?.id;
     if (!userId) {
@@ -260,7 +260,7 @@ export const updateBillingAddress: AppRouteHandler<UpdateBillingAddressRoute> = 
     const { db } = createDb(c.env);
     const { addressId } = c.req.valid("param");
     const body = c.req.valid("json");
-    
+
     // Get user ID from session
     const userId = c.get('user')?.id;
     if (!userId) {
@@ -344,7 +344,7 @@ export const deleteBillingAddress: AppRouteHandler<DeleteBillingAddressRoute> = 
   try {
     const { db } = createDb(c.env);
     const { addressId } = c.req.valid("param");
-    
+
     // Get user ID from session
     const userId = c.get('user')?.id;
     if (!userId) {

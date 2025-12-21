@@ -2,12 +2,18 @@ import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
+// Shared error response schema
+const errorResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+
 const profileSchema = z.object({
   id: z.number(),
-  userId: z.string(),
+  userId: z.string().nullable(),
   businessName: z.string().nullable(),
   phone: z.string().nullable(),
-  storageUsed: z.number(),
+  storageUsed: z.number().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -19,13 +25,13 @@ const updateProfileSchema = z.object({
 
 const billingAddressSchema = z.object({
   id: z.number(),
-  userId: z.number(),
+  userId: z.number().nullable(),
   street: z.string(),
   city: z.string(),
   state: z.string(),
   zip: z.string(),
   country: z.string(),
-  isDefault: z.boolean(),
+  isDefault: z.boolean().nullable(),
   createdAt: z.string().datetime(),
 });
 
@@ -72,18 +78,16 @@ export const getProfileRoute = createRoute({
       profileResponseSchema,
       "Profile retrieved successfully",
     ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Profile not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -107,18 +111,16 @@ export const updateProfileRoute = createRoute({
       profileResponseSchema,
       "Profile updated successfully",
     ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Profile not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -136,11 +138,16 @@ export const getBillingAddressesRoute = createRoute({
       billingAddressesResponseSchema,
       "Billing addresses retrieved successfully",
     ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      errorResponseSchema,
+      "Profile not found",
+    ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -164,11 +171,16 @@ export const createBillingAddressRoute = createRoute({
       billingAddressResponseSchema,
       "Billing address created successfully",
     ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      errorResponseSchema,
+      "Profile not found",
+    ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -195,18 +207,16 @@ export const updateBillingAddressRoute = createRoute({
       billingAddressResponseSchema,
       "Billing address updated successfully",
     ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Billing address not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -226,24 +236,19 @@ export const deleteBillingAddressRoute = createRoute({
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Billing address deleted successfully",
     ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Billing address not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },

@@ -4,27 +4,18 @@ import type { AppRouteHandler } from "@/lib/types";
 import { useImageUrlCache } from "@/lib/image-cache";
 import { eq, and, desc, count } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
-import type { 
-  GetAlbumByTokenRoute, 
-  GetFavoritesRoute, 
-  CreateFavoriteRoute, 
-  DeleteFavoriteRoute 
+import type {
+  GetAlbumByTokenRoute,
+  GetFavoritesRoute,
+  CreateFavoriteRoute,
+  DeleteFavoriteRoute
 } from "./public.routes";
 
 export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) => {
   try {
-    console.log("=== getAlbumByToken handler called ===");
     const { db } = createDb(c.env);
     const { token } = c.req.valid("param");
     const { page = 1, limit = 20 } = c.req.valid("query");
-    
-    console.log("Looking for album with share token:", token);
-    console.log("DB instance created:", !!db);
-    console.log("Pagination: page =", page, "limit =", limit);
-
-    // First, let's see all albums to debug
-    const allAlbums = await db.select().from(albums).limit(5);
-    console.log("First 5 albums:", allAlbums.map(a => ({ id: a.id, shareLinkToken: a.shareLinkToken })));
 
     // Get album by share token
     const [album] = await db
@@ -37,11 +28,8 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
       })
       .from(albums)
       .where(eq(albums.shareLinkToken, token));
-    
-    console.log("Found album:", album);
 
     if (!album) {
-      console.log("Album not found, returning 404");
       return c.json(
         {
           success: false,
