@@ -9,11 +9,22 @@ import { useBackBlaze } from "@/lib/backblaze";
 // Create or get share link
 export const createShareLink: AppRouteHandler<CreateShareLinkRoute> = async (c) => {
   try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
     const { db } = createDb(c.env);
     const { albumId } = c.req.valid("param");
     const webDomain = c.env.WEB_DOMAIN;
 
-    // Check if album exists
+    // Check if album exists and user owns it
     const [album] = await db
       .select()
       .from(albums)
@@ -26,6 +37,16 @@ export const createShareLink: AppRouteHandler<CreateShareLinkRoute> = async (c) 
           message: "Album not found",
         },
         HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    if (album.userId !== user.id) {
+      return c.json(
+        {
+          success: false,
+          message: "Forbidden - you don't own this album",
+        },
+        HttpStatusCodes.FORBIDDEN
       );
     }
 
@@ -83,13 +104,27 @@ export const createShareLink: AppRouteHandler<CreateShareLinkRoute> = async (c) 
   }
 };
 
-// Get all albums
+// Get all albums for authenticated user
 export const listAlbums: AppRouteHandler<ListAlbumsRoute> = async (c) => {
   try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
     const { db } = createDb(c.env);
     const { getPublicUrl } = await useBackBlaze(c.env);
 
-    const albumList = await db.select().from(albums);
+    const albumList = await db
+      .select()
+      .from(albums)
+      .where(eq(albums.userId, user.id));
 
     // Add preview link to each album if it has images
     const results = await Promise.all(
@@ -145,11 +180,22 @@ export const listAlbums: AppRouteHandler<ListAlbumsRoute> = async (c) => {
 // Delete entire album
 export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
   try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
     const { db } = createDb(c.env);
     const { albumId } = c.req.valid("param");
     const { deleteFile } = await useBackBlaze(c.env);
 
-    // Check if album exists
+    // Check if album exists and user owns it
     const [album] = await db
       .select()
       .from(albums)
@@ -162,6 +208,16 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
           message: "Album not found",
         },
         HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    if (album.userId !== user.id) {
+      return c.json(
+        {
+          success: false,
+          message: "Forbidden - you don't own this album",
+        },
+        HttpStatusCodes.FORBIDDEN
       );
     }
 
@@ -222,12 +278,23 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
 // Get album favorites
 export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async (c) => {
   try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
     const { db } = createDb(c.env);
     const { albumId } = c.req.valid("param");
     const query = c.req.valid("query") || {};
     const { getPublicUrl } = await useBackBlaze(c.env);
 
-    // Check if album exists
+    // Check if album exists and user owns it
     const [album] = await db
       .select()
       .from(albums)
@@ -240,6 +307,16 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
           message: "Album not found",
         },
         HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    if (album.userId !== user.id) {
+      return c.json(
+        {
+          success: false,
+          message: "Forbidden - you don't own this album",
+        },
+        HttpStatusCodes.FORBIDDEN
       );
     }
 
@@ -390,9 +467,47 @@ export const createAlbum: AppRouteHandler<CreateAlbumRoute> = async (c) => {
 
 export const generateUploadUrl: AppRouteHandler<GenerateUploadUrlRoute> = async (c) => {
   try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
     const { db } = createDb(c.env);
     const { files } = c.req.valid("json");
     const { albumId } = c.req.valid("param");
+
+    // Check if album exists and user owns it
+    const [album] = await db
+      .select()
+      .from(albums)
+      .where(eq(albums.id, albumId));
+
+    if (!album) {
+      return c.json(
+        {
+          success: false,
+          message: "Album not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    if (album.userId !== user.id) {
+      return c.json(
+        {
+          success: false,
+          message: "Forbidden - you don't own this album",
+        },
+        HttpStatusCodes.FORBIDDEN
+      );
+    }
+
     const { getSignedUrls } = await useBackBlaze(c.env)
     const urls = await getSignedUrls(files, albumId)
     return c.json(
@@ -417,11 +532,22 @@ export const generateUploadUrl: AppRouteHandler<GenerateUploadUrlRoute> = async 
 
 export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
   try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
     const { db } = createDb(c.env);
     const { albumId } = c.req.valid("param");
     const { images: uploadedImages } = c.req.valid("json");
 
-    // Check if album exists
+    // Check if album exists and user owns it
     const [album] = await db.select().from(albums).where(eq(albums.id, albumId));
     if (!album) {
       return c.json(
@@ -430,6 +556,16 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
           message: "Album not found",
         },
         HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    if (album.userId !== user.id) {
+      return c.json(
+        {
+          success: false,
+          message: "Forbidden - you don't own this album",
+        },
+        HttpStatusCodes.FORBIDDEN
       );
     }
 
@@ -504,11 +640,22 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
 // Get album with all images
 export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) => {
   try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
     const { db } = createDb(c.env);
     const { albumId } = c.req.valid("param");
     const { getPublicUrl } = await useBackBlaze(c.env);
 
-    // Get album by ID
+    // Get album by ID and verify ownership
     const [album] = await db
       .select()
       .from(albums)
@@ -521,6 +668,16 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
           message: "Album not found",
         },
         HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    if (album.userId !== user.id) {
+      return c.json(
+        {
+          success: false,
+          message: "Forbidden - you don't own this album",
+        },
+        HttpStatusCodes.FORBIDDEN
       );
     }
 
@@ -590,13 +747,24 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
 // Delete a single image
 export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
   try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
     const { db } = createDb(c.env);
     const { albumId, imageId } = c.req.valid("param");
     const { deleteFile } = await useBackBlaze(c.env);
 
-    // Verify album exists
+    // Verify album exists and user owns it
     const [album] = await db
-      .select({ totalSize: albums.totalSize, totalImages: albums.totalImages })
+      .select({ totalSize: albums.totalSize, totalImages: albums.totalImages, userId: albums.userId })
       .from(albums)
       .where(eq(albums.id, albumId));
 
@@ -607,6 +775,16 @@ export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
           message: "Album not found",
         },
         HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    if (album.userId !== user.id) {
+      return c.json(
+        {
+          success: false,
+          message: "Forbidden - you don't own this album",
+        },
+        HttpStatusCodes.FORBIDDEN
       );
     }
 
@@ -679,14 +857,25 @@ export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
 // Delete multiple images
 export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c) => {
   try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
     const { db } = createDb(c.env);
     const { albumId } = c.req.valid("param");
     const { imageIds } = c.req.valid("json");
     const { deleteFile } = await useBackBlaze(c.env);
 
-    // Verify album exists
+    // Verify album exists and user owns it
     const [album] = await db
-      .select({ totalSize: albums.totalSize, totalImages: albums.totalImages })
+      .select({ totalSize: albums.totalSize, totalImages: albums.totalImages, userId: albums.userId })
       .from(albums)
       .where(eq(albums.id, albumId));
 
@@ -697,6 +886,16 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
           message: "Album not found",
         },
         HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    if (album.userId !== user.id) {
+      return c.json(
+        {
+          success: false,
+          message: "Forbidden - you don't own this album",
+        },
+        HttpStatusCodes.FORBIDDEN
       );
     }
 
