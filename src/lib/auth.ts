@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
 import type { Environment } from "@/env";
+import { profiles } from "@/db/schema/profiles";
 
 export function createAuth(db: any, env: Environment) {
   return betterAuth({
@@ -32,5 +33,17 @@ export function createAuth(db: any, env: Environment) {
         adminRoles: ["admin", "staff"], // Both admin and staff have admin-level permissions
       }),
     ],
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user) => {
+            // Auto-create profile for new users
+            await db.insert(profiles).values({
+              userId: user.id,
+            }).onConflictDoNothing();
+          },
+        },
+      },
+    },
   });
 }

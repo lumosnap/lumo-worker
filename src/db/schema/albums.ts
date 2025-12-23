@@ -1,9 +1,9 @@
 import { pgTable, varchar, integer, timestamp, index, date, bigint, boolean, serial, text, pgEnum, unique } from 'drizzle-orm/pg-core';
-import { profiles } from './profiles';
+import { user } from './auth';
 
 export const albums = pgTable("albums", {
   id: varchar("id", { length: 25 }).primaryKey(),
-  userId: integer("user_id").references(() => profiles.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 255 }).notNull(),
   eventDate: date("event_date"),
   totalImages: integer("total_images").default(0).notNull(),

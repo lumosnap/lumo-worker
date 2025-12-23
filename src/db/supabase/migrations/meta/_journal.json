@@ -43,6 +43,13 @@
       "when": 1764863193982,
       "tag": "0005_concerned_wasp",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1766477162636,
+      "tag": "0006_wise_magik",
+      "breakpoints": true
     }
   ]
 }

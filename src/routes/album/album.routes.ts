@@ -5,7 +5,7 @@ import { jsonContent } from "stoker/openapi/helpers";
 
 const albumSchema = z.object({
   id: z.string(),
-  userId: z.number().int().nullable(),
+  userId: z.string().nullable(),
   title: z.string(),
   eventDate: z.string().nullable(),
   totalImages: z.number().int(),
@@ -20,7 +20,7 @@ const albumSchema = z.object({
 
 const createAlbumSchema = z.object({
   title: z.string().min(1).max(255).describe("The title of the album."),
-  userId: z.number().int().optional().describe("The ID of the user associated with the album."),
+  userId: z.string().optional().describe("The ID of the user associated with the album."),
   eventDate: z.string().optional().describe("The date of the event (e.g., '2025-12-31')."),
   expiresAt: z.string().datetime().optional().describe("The expiration date for a share link."),
   isPublic: z.boolean().optional().describe("Whether the album is publicly visible."),
@@ -91,7 +91,7 @@ const imageSchema = z.object({
 
 const albumWithImagesSchema = z.object({
   id: z.string(),
-  userId: z.number().int().nullable(),
+  userId: z.string().nullable(),
   title: z.string(),
   eventDate: z.string().nullable(),
   totalImages: z.number().int(),
