@@ -17,6 +17,7 @@ export function createAuth(db: any, env: Environment) {
       google: {
         clientId: env.GOOGLE_DESKTOP_CLIENT_ID,
         clientSecret: env.GOOGLE_DESKTOP_CLIENT_SECRET,
+        redirectProxyUrl:`${env.BETTER_AUTH_URL}/auth/google/callback`,
       },
     },
     secret: env.BETTER_AUTH_SECRET,
