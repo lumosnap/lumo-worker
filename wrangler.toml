@@ -3,9 +3,18 @@ main = "src/app.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 tsconfig = "tsconfig.json"
+
 [observability]
-[observability.logs]
 enabled = false
 head_sampling_rate = 1
-invocation_logs = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
 persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+persist = true
+head_sampling_rate = 1

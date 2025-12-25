@@ -15,9 +15,8 @@ export function createAuth(db: any, env: Environment) {
     },
     socialProviders: {
       google: {
-        clientId: env.GOOGLE_CLIENT_ID,
-        clientSecret: env.GOOGLE_CLIENT_SECRET,
-        redirectURI: `${env.BETTER_AUTH_URL}/api/auth/callback/google`, // Backend callback
+        clientId: env.GOOGLE_DESKTOP_CLIENT_ID,
+        clientSecret: env.GOOGLE_DESKTOP_CLIENT_SECRET,
       },
     },
     secret: env.BETTER_AUTH_SECRET,
@@ -30,14 +29,13 @@ export function createAuth(db: any, env: Environment) {
     },
     plugins: [
       admin({
-        adminRoles: ["admin", "staff"], // Both admin and staff have admin-level permissions
+        adminRoles: ["admin", "staff"],
       }),
     ],
     databaseHooks: {
       user: {
         create: {
           after: async (user) => {
-            // Auto-create profile for new users
             await db.insert(profiles).values({
               userId: user.id,
             }).onConflictDoNothing();
