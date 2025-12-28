@@ -35,12 +35,13 @@ export default function createApp() {
       const allowedOrigins = [
         'http://localhost:3000',
         'http://localhost:5173',
-        c.env.WEB_DOMAIN
+        c.env.WEB_DOMAIN,
+        c.env.ONBOARDING_URL
       ].filter(Boolean);
-      
+
       // Allow requests with no origin (like mobile apps or curl)
       if (!origin) return undefined;
-      
+
       return allowedOrigins.includes(origin) ? origin : undefined;
     },
     credentials: true,
