@@ -7,7 +7,6 @@ import album from "@/routes/album/album.index";
 import publicRoutes from "@/routes/public/public.index";
 import profile from "@/routes/profile/profile.index";
 import billing from "@/routes/billing/billing.index";
-import auth from "@/routes/auth/auth.index";
 import index from "@/routes/index.route";
 import { createAuth } from "@/lib/auth";
 import { createDb } from "@/db";
@@ -32,7 +31,6 @@ const routes = [
   publicRoutes,
   profile,
   billing,
-  auth,
 ] as const;
 
 routes.forEach((route) => {
