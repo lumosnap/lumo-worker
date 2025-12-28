@@ -1,4 +1,3 @@
-import { createDb } from "@/db";
 import { albums, images, favorites } from "@/db/schema/albums";
 import type { AppRouteHandler } from "@/lib/types";
 import { useImageUrlCache } from "@/lib/image-cache";
@@ -13,7 +12,7 @@ import type {
 
 export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { token } = c.req.valid("param");
     const { page = 1, limit = 20 } = c.req.valid("query");
 
@@ -122,7 +121,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
 
 export const getFavorites: AppRouteHandler<GetFavoritesRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { token } = c.req.valid("param");
     const { clientName } = c.req.valid("query");
 
@@ -177,7 +176,7 @@ export const getFavorites: AppRouteHandler<GetFavoritesRoute> = async (c) => {
 
 export const createFavorite: AppRouteHandler<CreateFavoriteRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { token } = c.req.valid("param");
     const { imageId, clientName, notes } = c.req.valid("json");
 
@@ -268,7 +267,7 @@ export const createFavorite: AppRouteHandler<CreateFavoriteRoute> = async (c) =>
 
 export const deleteFavorite: AppRouteHandler<DeleteFavoriteRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { token, favoriteId } = c.req.valid("param");
 
     // Verify album exists

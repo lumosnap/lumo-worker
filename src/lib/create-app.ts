@@ -4,6 +4,7 @@ import { defaultHook } from "stoker/openapi";
 import { parseEnv } from "@/env";
 import { pinoLogger } from "@/middlewares/pino-logger";
 import { authMiddleware } from "@/middlewares/auth";
+import { createDb } from "@/db";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type { AppBindings } from "./types";
 import { cors } from 'hono/cors'
@@ -22,6 +23,14 @@ export default function createApp() {
   app.use((c, next) => {
     // eslint-disable-next-line node/no-process-env
     c.env = parseEnv(Object.assign(c.env || {}, process.env));
+    return next();
+  });
+
+  // Initialize database connection once per request
+  app.use(async (c, next) => {
+    const { db, client } = createDb(c.env);
+    c.set('db', db);
+    c.set('dbClient', client);
     return next();
   });
 

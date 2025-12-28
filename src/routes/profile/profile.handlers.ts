@@ -1,4 +1,3 @@
-import { createDb } from "@/db";
 import { profiles, billingAddresses } from "@/db/schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, and, desc } from "drizzle-orm";
@@ -14,7 +13,7 @@ import type {
 
 export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
 
     // Get user ID from session (this would come from auth middleware)
     const userId = c.get('user')?.id;
@@ -65,7 +64,7 @@ export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
 
 export const updateProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const body = c.req.valid("json");
 
     // Get user ID from session
@@ -128,7 +127,7 @@ export const updateProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
 
 export const getBillingAddresses: AppRouteHandler<GetBillingAddressesRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
 
     // Get user ID from session
     const userId = c.get('user')?.id;
@@ -187,7 +186,7 @@ export const getBillingAddresses: AppRouteHandler<GetBillingAddressesRoute> = as
 
 export const createBillingAddress: AppRouteHandler<CreateBillingAddressRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const body = c.req.valid("json");
 
     // Get user ID from session
@@ -257,7 +256,7 @@ export const createBillingAddress: AppRouteHandler<CreateBillingAddressRoute> = 
 
 export const updateBillingAddress: AppRouteHandler<UpdateBillingAddressRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { addressId } = c.req.valid("param");
     const body = c.req.valid("json");
 
@@ -342,7 +341,7 @@ export const updateBillingAddress: AppRouteHandler<UpdateBillingAddressRoute> = 
 
 export const deleteBillingAddress: AppRouteHandler<DeleteBillingAddressRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { addressId } = c.req.valid("param");
 
     // Get user ID from session

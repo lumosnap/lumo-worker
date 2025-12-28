@@ -1,11 +1,10 @@
 import { createMiddleware } from 'hono/factory'
 import type { AppBindings, User, Session } from '@/lib/types'
 import { createAuth } from '@/lib/auth'
-import { createDb } from '@/db'
 
 export const authMiddleware = createMiddleware<AppBindings>(async (c, next) => {
   try {
-    const { db } = createDb(c.env)
+    const db = c.get('db')
     const auth = createAuth(db, c.env)
 
     // Get session using Better Auth's native method

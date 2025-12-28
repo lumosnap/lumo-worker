@@ -1,4 +1,3 @@
-import { createDb } from "@/db";
 import { testTable } from "@/db/schema";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq } from "drizzle-orm";
@@ -9,7 +8,7 @@ import type { CreateTestRoute, GetTestRoute, ListTestsRoute } from "./hello.rout
 export const listTests: AppRouteHandler<ListTestsRoute> = async (c) => {
   try {
 
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const tests = await db.select().from(testTable);
 
     return c.json(
@@ -34,7 +33,7 @@ export const listTests: AppRouteHandler<ListTestsRoute> = async (c) => {
 // Get single test by ID
 export const getTest: AppRouteHandler<GetTestRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { id } = c.req.valid("param");
 
     const [test] = await db
@@ -75,7 +74,7 @@ export const getTest: AppRouteHandler<GetTestRoute> = async (c) => {
 // Create test
 export const createTest: AppRouteHandler<CreateTestRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const body = c.req.valid("json");
 
     const [newTest] = await db

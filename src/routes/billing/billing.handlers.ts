@@ -1,11 +1,10 @@
-import { createDb } from "@/db";
 import { plans, subscriptions } from "@/db/schema/billing";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, and, desc } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
-import type { 
-  GetPlansRoute, 
-  GetSubscriptionRoute, 
+import type {
+  GetPlansRoute,
+  GetSubscriptionRoute,
   CreateSubscriptionRoute,
   UpdateSubscriptionRoute,
   CancelSubscriptionRoute
@@ -13,7 +12,7 @@ import type {
 
 export const getPlans: AppRouteHandler<GetPlansRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
 
     const availablePlans = await db
       .select()
@@ -43,8 +42,8 @@ export const getPlans: AppRouteHandler<GetPlansRoute> = async (c) => {
 
 export const getSubscription: AppRouteHandler<GetSubscriptionRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
-    
+    const db = c.get('db');
+
     // Get user ID from session
     const userId = c.get('user')?.id;
     if (!userId) {
@@ -115,9 +114,9 @@ export const getSubscription: AppRouteHandler<GetSubscriptionRoute> = async (c) 
 
 export const createSubscription: AppRouteHandler<CreateSubscriptionRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { planId } = c.req.valid("json");
-    
+
     // Get user ID from session
     const userId = c.get('user')?.id;
     if (!userId) {
@@ -228,9 +227,9 @@ export const createSubscription: AppRouteHandler<CreateSubscriptionRoute> = asyn
 
 export const updateSubscription: AppRouteHandler<UpdateSubscriptionRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { planId } = c.req.valid("json");
-    
+
     // Get user ID from session
     const userId = c.get('user')?.id;
     if (!userId) {
@@ -335,8 +334,8 @@ export const updateSubscription: AppRouteHandler<UpdateSubscriptionRoute> = asyn
 
 export const cancelSubscription: AppRouteHandler<CancelSubscriptionRoute> = async (c) => {
   try {
-    const { db } = createDb(c.env);
-    
+    const db = c.get('db');
+
     // Get user ID from session
     const userId = c.get('user')?.id;
     if (!userId) {

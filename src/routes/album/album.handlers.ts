@@ -1,4 +1,3 @@
-import { createDb } from "@/db";
 import { albums, images, favorites } from "@/db/schema/albums";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, desc, and } from "drizzle-orm";
@@ -20,7 +19,7 @@ export const createShareLink: AppRouteHandler<CreateShareLinkRoute> = async (c) 
       );
     }
 
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { albumId } = c.req.valid("param");
     const webDomain = c.env.WEB_DOMAIN;
 
@@ -118,13 +117,16 @@ export const listAlbums: AppRouteHandler<ListAlbumsRoute> = async (c) => {
       );
     }
 
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { getPublicUrl } = await useBackBlaze(c.env);
 
+    // Limit albums to prevent unbounded queries
     const albumList = await db
       .select()
       .from(albums)
-      .where(eq(albums.userId, user.id));
+      .where(eq(albums.userId, user.id))
+      .orderBy(desc(albums.createdAt))
+      .limit(50);
 
     // Add preview link to each album if it has images
     const results = await Promise.all(
@@ -191,7 +193,7 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
       );
     }
 
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { albumId } = c.req.valid("param");
     const { deleteFile } = await useBackBlaze(c.env);
 
@@ -228,24 +230,32 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
       .where(eq(images.albumId, albumId));
 
     // Delete all files from Backblaze B2 (both main images and thumbnails)
+    // Use batched parallel deletion to avoid CPU time limits
     let deletedFiles = 0;
     let failedDeletions = 0;
+    const BATCH_SIZE = 10;
 
+    // Collect all file IDs to delete
+    const fileIdsToDelete: string[] = [];
     for (const image of albumImages) {
-      try {
-        // Delete main image file
-        if (image.b2FileId) {
-          await deleteFile(image.b2FileId);
+      if (image.b2FileId) fileIdsToDelete.push(image.b2FileId);
+      if (image.thumbnailB2FileId) fileIdsToDelete.push(image.thumbnailB2FileId);
+    }
+
+    // Delete in batches
+    for (let i = 0; i < fileIdsToDelete.length; i += BATCH_SIZE) {
+      const batch = fileIdsToDelete.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(fileId => deleteFile(fileId))
+      );
+
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
           deletedFiles++;
+        } else {
+          console.error('Failed to delete file:', result.reason);
+          failedDeletions++;
         }
-        // Delete thumbnail file if exists
-        if (image.thumbnailB2FileId) {
-          await deleteFile(image.thumbnailB2FileId);
-          deletedFiles++;
-        }
-      } catch (deleteError) {
-        console.error(`Failed to delete file for image ${image.id}:`, deleteError);
-        failedDeletions++;
       }
     }
 
@@ -289,7 +299,7 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
       );
     }
 
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { albumId } = c.req.valid("param");
     const query = c.req.valid("query") || {};
     const { getPublicUrl } = await useBackBlaze(c.env);
@@ -411,7 +421,7 @@ export const createAlbum: AppRouteHandler<CreateAlbumRoute> = async (c) => {
     }
 
     const { createId } = await import('@paralleldrive/cuid2');
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const body = c.req.valid("json");
     const id = createId()
 
@@ -478,7 +488,7 @@ export const generateUploadUrl: AppRouteHandler<GenerateUploadUrlRoute> = async 
       );
     }
 
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { files } = c.req.valid("json");
     const { albumId } = c.req.valid("param");
 
@@ -543,7 +553,7 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
       );
     }
 
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { albumId } = c.req.valid("param");
     const { images: uploadedImages } = c.req.valid("json");
 
@@ -651,7 +661,7 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
       );
     }
 
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { albumId } = c.req.valid("param");
     const { getPublicUrl } = await useBackBlaze(c.env);
 
@@ -758,7 +768,7 @@ export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
       );
     }
 
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { albumId, imageId } = c.req.valid("param");
     const { deleteFile } = await useBackBlaze(c.env);
 
@@ -868,7 +878,7 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
       );
     }
 
-    const { db } = createDb(c.env);
+    const db = c.get('db');
     const { albumId } = c.req.valid("param");
     const { imageIds } = c.req.valid("json");
     const { deleteFile } = await useBackBlaze(c.env);

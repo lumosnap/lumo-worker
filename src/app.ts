@@ -9,7 +9,6 @@ import profile from "@/routes/profile/profile.index";
 import billing from "@/routes/billing/billing.index";
 import index from "@/routes/index.route";
 import { createAuth } from "@/lib/auth";
-import { createDb } from "@/db";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 config();
 expand(config());
@@ -19,7 +18,7 @@ const app = createApp();
 configureOpenAPI(app);
 // Mount Better Auth routes
 app.all("/api/auth/*", async (c) => {
-  const { db } = createDb(c.env);
+  const db = c.get('db');
   const auth = createAuth(db, c.env);
   return auth.handler(c.req.raw);
 });
