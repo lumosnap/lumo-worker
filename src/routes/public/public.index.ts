@@ -4,8 +4,9 @@ import * as routes from "./public.routes";
 
 const router = createRouter()
   .openapi(routes.getAlbumByTokenRoute, handlers.getAlbumByToken)
-  .openapi(routes.getFavoritesRoute, handlers.getFavorites)
+  .openapi(routes.getFavoriteImagesRoute, handlers.getFavoriteImages)
   .openapi(routes.createFavoriteRoute, handlers.createFavorite)
-  .openapi(routes.deleteFavoriteRoute, handlers.deleteFavorite);
+  .openapi(routes.deleteFavoriteRoute, handlers.deleteFavorite)
+  .openapi(routes.updateNotesRoute, handlers.updateNotes);
 
 export default router;

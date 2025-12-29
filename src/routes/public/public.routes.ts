@@ -2,6 +2,18 @@ import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 
+const commentSchema = z.object({
+  clientName: z.string(),
+  notes: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+
+const userFavoriteSchema = z.object({
+  id: z.number(),
+  notes: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+
 const imageSchema = z.object({
   id: z.number(),
   originalFilename: z.string(),
@@ -10,8 +22,10 @@ const imageSchema = z.object({
   createdAt: z.string().datetime(),
   url: z.string().url(),
   thumbnailUrl: z.string().url().nullable(),
+  favoriteCount: z.number(),
+  comments: z.array(commentSchema),
+  userFavorite: userFavoriteSchema.nullable(),
 });
-
 
 const favoriteSchema = z.object({
   id: z.number(),
@@ -28,12 +42,13 @@ const createFavoriteSchema = z.object({
   notes: z.string().optional(),
 });
 
+const updateNotesSchema = z.object({
+  clientName: z.string().min(1).max(255),
+  notes: z.string().optional(),
+});
 
-
-const favoritesResponseSchema = z.object({
-  success: z.boolean(),
-  message: z.string(),
-  data: z.array(favoriteSchema).optional(),
+const deleteFavoriteSchema = z.object({
+  clientName: z.string().min(1).max(255),
 });
 
 const favoriteResponseSchema = z.object({
@@ -58,6 +73,8 @@ export const getAlbumByTokenRoute = createRoute({
       token: z.string(),
     }),
     query: z.object({
+      clientName: z.string().optional(),
+      favorites: z.string().optional(),
       page: z.string().optional().transform((val) => val ? parseInt(val) : 1),
       limit: z.string().optional().transform((val) => val ? parseInt(val) : 20),
     }),
@@ -74,6 +91,8 @@ export const getAlbumByTokenRoute = createRoute({
             eventDate: z.string().nullable(),
             totalImages: z.number(),
             shareLinkToken: z.string().nullable(),
+            favoritedPhotosCount: z.number(),
+            ownerName: z.string().nullable(),
           }),
           images: z.array(imageSchema),
           pagination: z.object({
@@ -104,25 +123,29 @@ export const getAlbumByTokenRoute = createRoute({
   },
 });
 
-// GET favorites for album
-export const getFavoritesRoute = createRoute({
+// GET favorited images for a client
+export const getFavoriteImagesRoute = createRoute({
   tags: ["Public"],
   method: "get",
-  summary: "Get favorites for album",
-  description: "Retrieve all favorites for an album",
+  summary: "Get favorited images for client",
+  description: "Retrieve only images favorited by a specific client",
   path: "/share/:token/favorites",
   request: {
     params: z.object({
       token: z.string(),
     }),
     query: z.object({
-      clientName: z.string().optional(),
+      clientName: z.string().min(1).max(255),
     }),
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
-      favoritesResponseSchema,
-      "Favorites retrieved successfully",
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+        data: z.array(imageSchema).optional(),
+      }),
+      "Favorite images retrieved successfully",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
       z.object({
@@ -191,13 +214,17 @@ export const deleteFavoriteRoute = createRoute({
   tags: ["Public"],
   method: "delete",
   summary: "Delete favorite",
-  description: "Remove a photo from favorites",
+  description: "Remove a photo from favorites (only by the same clientName that created it)",
   path: "/share/:token/favorites/:favoriteId",
   request: {
     params: z.object({
       token: z.string(),
       favoriteId: z.string(),
     }),
+    body: jsonContent(
+      deleteFavoriteSchema,
+      "Client name for verification",
+    ),
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
@@ -206,6 +233,59 @@ export const deleteFavoriteRoute = createRoute({
         message: z.string(),
       }),
       "Favorite deleted successfully",
+    ),
+    [HttpStatusCodes.FORBIDDEN]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Client name does not match",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Favorite not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+});
+
+// PATCH update notes on favorite
+export const updateNotesRoute = createRoute({
+  tags: ["Public"],
+  method: "patch",
+  summary: "Update notes on favorite",
+  description: "Update notes for a favorited photo (only by the same clientName that created it)",
+  path: "/share/:token/favorites/:favoriteId/notes",
+  request: {
+    params: z.object({
+      token: z.string(),
+      favoriteId: z.string(),
+    }),
+    body: jsonContent(
+      updateNotesSchema,
+      "Notes data",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      favoriteResponseSchema,
+      "Notes updated successfully",
+    ),
+    [HttpStatusCodes.FORBIDDEN]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Client name does not match",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
       z.object({
@@ -225,6 +305,7 @@ export const deleteFavoriteRoute = createRoute({
 });
 
 export type GetAlbumByTokenRoute = typeof getAlbumByTokenRoute;
-export type GetFavoritesRoute = typeof getFavoritesRoute;
+export type GetFavoriteImagesRoute = typeof getFavoriteImagesRoute;
 export type CreateFavoriteRoute = typeof createFavoriteRoute;
 export type DeleteFavoriteRoute = typeof deleteFavoriteRoute;
+export type UpdateNotesRoute = typeof updateNotesRoute;

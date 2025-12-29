@@ -1,20 +1,25 @@
 import { albums, images, favorites } from "@/db/schema/albums";
+import { profiles } from "@/db/schema/profiles";
+import { user } from "@/db/schema/auth";
 import type { AppRouteHandler } from "@/lib/types";
 import { useImageUrlCache } from "@/lib/image-cache";
 import { eq, and, desc, count } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type {
   GetAlbumByTokenRoute,
-  GetFavoritesRoute,
+  GetFavoriteImagesRoute,
   CreateFavoriteRoute,
-  DeleteFavoriteRoute
+  DeleteFavoriteRoute,
+  UpdateNotesRoute
 } from "./public.routes";
 
 export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) => {
   try {
     const db = c.get('db');
     const { token } = c.req.valid("param");
-    const { page = 1, limit = 20 } = c.req.valid("query");
+    const { clientName, favorites: favoritesParam, page = 1, limit = 20 } = c.req.valid("query");
+
+    const favoriteOnly = favoritesParam === 'true' || favoritesParam === '1';
 
     // Get album by share token
     const [album] = await db
@@ -24,6 +29,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
         eventDate: albums.eventDate,
         totalImages: albums.totalImages,
         shareLinkToken: albums.shareLinkToken,
+        userId: albums.userId,
       })
       .from(albums)
       .where(eq(albums.shareLinkToken, token));
@@ -38,33 +44,99 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
       );
     }
 
-    // Calculate pagination
-    const offset = (page - 1) * limit;
-    const totalPages = Math.ceil(album.totalImages / limit);
-
-    // Get total count for pagination
-    const [imageCountResult] = await db
-      .select({ count: count() })
-      .from(images)
-      .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')));
-
-    const totalImages = imageCountResult.count;
-
-    // Get paginated images for the album
-    const albumImages = await db
+    // Get owner profile info (businessName or username)
+    const [profile] = await db
       .select({
-        id: images.id,
-        b2FileName: images.b2FileName,
-        originalFilename: images.originalFilename,
-        width: images.width,
-        height: images.height,
-        createdAt: images.createdAt,
+        businessName: profiles.businessName,
       })
-      .from(images)
-      .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')))
-      .orderBy(desc(images.uploadOrder))
-      .limit(limit)
-      .offset(offset);
+      .from(profiles)
+      .where(eq(profiles.userId, album.userId));
+
+    const [owner] = await db
+      .select({
+        name: user.name,
+      })
+      .from(user)
+      .where(eq(user.id, album.userId));
+
+    const ownerName = profile?.businessName || owner?.name || null;
+
+    // Get all favorites for this album (for filtering and building response)
+    const albumFavorites = await db
+      .select()
+      .from(favorites)
+      .where(eq(favorites.albumId, album.id));
+
+    // Get image IDs that have favorites (for favorite filter) and count
+    const favoritedImageIds = new Set(
+      albumFavorites
+        .map((fav) => fav.imageId)
+        .filter((id): id is number => id !== null)
+    );
+
+    // Count of photos with at least 1 favorite
+    const favoritedPhotosCount = favoritedImageIds.size;
+
+    // If favorite filter is enabled, we need to handle pagination differently
+    let totalImages = 0;
+    let paginatedImages: Array<{
+      id: number;
+      b2FileName: string;
+      originalFilename: string;
+      width: number;
+      height: number;
+      createdAt: Date;
+    }>;
+
+    if (favoriteOnly) {
+      // For favorite filter, get all complete images first, then filter
+      const allImages = await db
+        .select({
+          id: images.id,
+          b2FileName: images.b2FileName,
+          originalFilename: images.originalFilename,
+          width: images.width,
+          height: images.height,
+          createdAt: images.createdAt,
+        })
+        .from(images)
+        .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')))
+        .orderBy(desc(images.uploadOrder));
+
+      // Filter to only favorited images (images that have at least one favorite from anyone)
+      const filteredImages = allImages.filter((img) => favoritedImageIds.has(img.id));
+      totalImages = filteredImages.length;
+
+      // Apply pagination after filtering
+      const offset = (page - 1) * limit;
+      paginatedImages = filteredImages.slice(offset, offset + limit);
+    } else {
+      // Normal pagination
+      const offset = (page - 1) * limit;
+      const [imageCountResult] = await db
+        .select({ count: count() })
+        .from(images)
+        .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')));
+
+      totalImages = imageCountResult.count;
+
+      paginatedImages = await db
+        .select({
+          id: images.id,
+          b2FileName: images.b2FileName,
+          originalFilename: images.originalFilename,
+          width: images.width,
+          height: images.height,
+          createdAt: images.createdAt,
+        })
+        .from(images)
+        .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')))
+        .orderBy(desc(images.uploadOrder))
+        .limit(limit)
+        .offset(offset);
+    }
+
+    const totalPages = Math.ceil(totalImages / limit);
 
     // Initialize image URL cache
     const { generateImageUrl, generateThumbnailUrl, clearExpired } = useImageUrlCache();
@@ -74,17 +146,53 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
       clearExpired();
     }
 
-    // Generate view URLs for images (exclude internal fields)
-    const imagesWithUrls = await Promise.all(
-      albumImages.map(async (img) => ({
-        id: img.id,
-        originalFilename: img.originalFilename,
-        width: img.width,
-        height: img.height,
-        createdAt: img.createdAt,
-        url: await generateImageUrl(img.b2FileName, c.env),
-        thumbnailUrl: img.b2FileName ? await generateThumbnailUrl(img.b2FileName, c.env) : null,
-      }))
+    // Build a map of imageId to favorites
+    const favoritesByImage = new Map<number, typeof albumFavorites>();
+    for (const fav of albumFavorites) {
+      if (fav.imageId !== null) {
+        if (!favoritesByImage.has(fav.imageId)) {
+          favoritesByImage.set(fav.imageId, []);
+        }
+        favoritesByImage.get(fav.imageId)!.push(fav);
+      }
+    }
+
+    // Generate view URLs for images with favorite data
+    const imagesWithFavoriteData = await Promise.all(
+      paginatedImages.map(async (img: any) => {
+        const imageFavorites = favoritesByImage.get(img.id) || [];
+
+        // Build comments array (all favorites for this image)
+        const comments = imageFavorites.map((fav) => ({
+          clientName: fav.clientName,
+          notes: fav.notes,
+          createdAt: fav.createdAt,
+        }));
+
+        // Find user's favorite for this image
+        const userFavorite = clientName
+          ? imageFavorites.find((fav) => fav.clientName === clientName)
+          : undefined;
+
+        return {
+          id: img.id,
+          originalFilename: img.originalFilename,
+          width: img.width,
+          height: img.height,
+          createdAt: img.createdAt,
+          url: await generateImageUrl(img.b2FileName, c.env),
+          thumbnailUrl: img.b2FileName ? await generateThumbnailUrl(img.b2FileName, c.env) : null,
+          favoriteCount: imageFavorites.length,
+          comments,
+          userFavorite: userFavorite
+            ? {
+                id: userFavorite.id,
+                notes: userFavorite.notes,
+                createdAt: userFavorite.createdAt,
+              }
+            : null,
+        };
+      })
     );
 
     const pagination = {
@@ -100,8 +208,16 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
         success: true,
         message: "Album retrieved successfully",
         data: {
-          album,
-          images: imagesWithUrls,
+          album: {
+            id: album.id,
+            title: album.title,
+            eventDate: album.eventDate,
+            totalImages: album.totalImages,
+            shareLinkToken: album.shareLinkToken,
+            favoritedPhotosCount,
+            ownerName,
+          },
+          images: imagesWithFavoriteData,
           pagination,
         },
       },
@@ -119,7 +235,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
   }
 };
 
-export const getFavorites: AppRouteHandler<GetFavoritesRoute> = async (c) => {
+export const getFavoriteImages: AppRouteHandler<GetFavoriteImagesRoute> = async (c) => {
   try {
     const db = c.get('db');
     const { token } = c.req.valid("param");
@@ -141,24 +257,112 @@ export const getFavorites: AppRouteHandler<GetFavoritesRoute> = async (c) => {
       );
     }
 
-    // Build query conditions
-    const conditions = [eq(favorites.albumId, album.id)];
-    if (clientName) {
-      conditions.push(eq(favorites.clientName, clientName));
-    }
-
-    // Get favorites
-    const albumFavorites = await db
+    // Get favorites for this specific client
+    const clientFavorites = await db
       .select()
       .from(favorites)
-      .where(and(...conditions))
+      .where(and(eq(favorites.albumId, album.id), eq(favorites.clientName, clientName)))
       .orderBy(desc(favorites.createdAt));
+
+    // If no favorites, return empty array
+    if (clientFavorites.length === 0) {
+      return c.json(
+        {
+          success: true,
+          message: "Favorite images retrieved successfully",
+          data: [],
+        },
+        HttpStatusCodes.OK
+      );
+    }
+
+    // Get image IDs
+    const imageIds = clientFavorites.map((fav) => fav.imageId!).filter(Boolean);
+
+    // Get the images
+    const favoritedImages = await db
+      .select({
+        id: images.id,
+        b2FileName: images.b2FileName,
+        originalFilename: images.originalFilename,
+        width: images.width,
+        height: images.height,
+        createdAt: images.createdAt,
+      })
+      .from(images)
+      .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')));
+
+    // Filter images to only those favorited by the client
+    const filteredImages = favoritedImages.filter((img) => imageIds.includes(img.id));
+
+    // Get all favorites for these images (for comments)
+    const allFavoritesForImages = await db
+      .select()
+      .from(favorites)
+      .where(
+        and(
+          eq(favorites.albumId, album.id),
+          fav.imageId !== null ? eq(favorites.imageId, clientFavorites[0].imageId!) : undefined
+        )
+      );
+
+    // Build a map of imageId to favorites
+    const favoritesByImage = new Map<number, typeof clientFavorites>();
+    for (const fav of clientFavorites) {
+      if (fav.imageId !== null) {
+        // Get all favorites for each image
+        const imageFavorites = await db
+          .select()
+          .from(favorites)
+          .where(and(eq(favorites.albumId, album.id), eq(favorites.imageId, fav.imageId!)));
+        favoritesByImage.set(fav.imageId, imageFavorites);
+      }
+    }
+
+    // Initialize image URL cache
+    const { generateImageUrl, generateThumbnailUrl } = useImageUrlCache();
+
+    // Generate images with favorite data
+    const imagesWithFavoriteData = await Promise.all(
+      filteredImages.map(async (img) => {
+        const imageFavorites = favoritesByImage.get(img.id) || [];
+
+        // Build comments array
+        const comments = imageFavorites.map((fav) => ({
+          clientName: fav.clientName,
+          notes: fav.notes,
+          createdAt: fav.createdAt,
+        }));
+
+        // Find user's favorite
+        const userFavorite = imageFavorites.find((fav) => fav.clientName === clientName);
+
+        return {
+          id: img.id,
+          originalFilename: img.originalFilename,
+          width: img.width,
+          height: img.height,
+          createdAt: img.createdAt,
+          url: await generateImageUrl(img.b2FileName, c.env),
+          thumbnailUrl: img.b2FileName ? await generateThumbnailUrl(img.b2FileName, c.env) : null,
+          favoriteCount: imageFavorites.length,
+          comments,
+          userFavorite: userFavorite
+            ? {
+                id: userFavorite.id,
+                notes: userFavorite.notes,
+                createdAt: userFavorite.createdAt,
+              }
+            : null,
+        };
+      })
+    );
 
     return c.json(
       {
         success: true,
-        message: "Favorites retrieved successfully",
-        data: albumFavorites,
+        message: "Favorite images retrieved successfully",
+        data: imagesWithFavoriteData,
       },
       HttpStatusCodes.OK
     );
@@ -167,7 +371,7 @@ export const getFavorites: AppRouteHandler<GetFavoritesRoute> = async (c) => {
     return c.json(
       {
         success: false,
-        message: "Problem retrieving favorites",
+        message: "Problem retrieving favorite images",
       },
       HttpStatusCodes.INTERNAL_SERVER_ERROR
     );
@@ -269,6 +473,7 @@ export const deleteFavorite: AppRouteHandler<DeleteFavoriteRoute> = async (c) =>
   try {
     const db = c.get('db');
     const { token, favoriteId } = c.req.valid("param");
+    const { clientName } = c.req.valid("json");
 
     // Verify album exists
     const [album] = await db
@@ -286,13 +491,13 @@ export const deleteFavorite: AppRouteHandler<DeleteFavoriteRoute> = async (c) =>
       );
     }
 
-    // Delete favorite (only if it belongs to this album)
-    const result = await db
-      .delete(favorites)
-      .where(and(eq(favorites.id, parseInt(favoriteId)), eq(favorites.albumId, album.id)))
-      .returning();
+    // Get the favorite to verify clientName matches
+    const [existingFavorite] = await db
+      .select()
+      .from(favorites)
+      .where(and(eq(favorites.id, parseInt(favoriteId)), eq(favorites.albumId, album.id)));
 
-    if (result.length === 0) {
+    if (!existingFavorite) {
       return c.json(
         {
           success: false,
@@ -301,6 +506,22 @@ export const deleteFavorite: AppRouteHandler<DeleteFavoriteRoute> = async (c) =>
         HttpStatusCodes.NOT_FOUND
       );
     }
+
+    // Verify clientName matches (only the creator can delete)
+    if (existingFavorite.clientName !== clientName) {
+      return c.json(
+        {
+          success: false,
+          message: "You are not authorized to delete this favorite",
+        },
+        HttpStatusCodes.FORBIDDEN
+      );
+    }
+
+    // Delete favorite
+    await db
+      .delete(favorites)
+      .where(eq(favorites.id, parseInt(favoriteId)));
 
     return c.json(
       {
@@ -315,6 +536,82 @@ export const deleteFavorite: AppRouteHandler<DeleteFavoriteRoute> = async (c) =>
       {
         success: false,
         message: "Problem deleting favorite",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const updateNotes: AppRouteHandler<UpdateNotesRoute> = async (c) => {
+  try {
+    const db = c.get('db');
+    const { token, favoriteId } = c.req.valid("param");
+    const { clientName, notes } = c.req.valid("json");
+
+    // Verify album exists
+    const [album] = await db
+      .select({ id: albums.id })
+      .from(albums)
+      .where(eq(albums.shareLinkToken, token));
+
+    if (!album) {
+      return c.json(
+        {
+          success: false,
+          message: "Album not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // Get the favorite to verify clientName matches
+    const [existingFavorite] = await db
+      .select()
+      .from(favorites)
+      .where(and(eq(favorites.id, parseInt(favoriteId)), eq(favorites.albumId, album.id)));
+
+    if (!existingFavorite) {
+      return c.json(
+        {
+          success: false,
+          message: "Favorite not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // Verify clientName matches (only the creator can update)
+    if (existingFavorite.clientName !== clientName) {
+      return c.json(
+        {
+          success: false,
+          message: "You are not authorized to update this favorite",
+        },
+        HttpStatusCodes.FORBIDDEN
+      );
+    }
+
+    // Update notes
+    const result = await db
+      .update(favorites)
+      .set({ notes })
+      .where(eq(favorites.id, parseInt(favoriteId)))
+      .returning();
+
+    return c.json(
+      {
+        success: true,
+        message: "Notes updated successfully",
+        data: result[0],
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem updating notes",
       },
       HttpStatusCodes.INTERNAL_SERVER_ERROR
     );
