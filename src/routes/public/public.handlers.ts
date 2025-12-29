@@ -3,7 +3,7 @@ import { profiles } from "@/db/schema/profiles";
 import { user } from "@/db/schema/auth";
 import type { AppRouteHandler } from "@/lib/types";
 import { useImageUrlCache } from "@/lib/image-cache";
-import { eq, and, desc, count } from "drizzle-orm";
+import { eq, and, desc, count, isNotNull, ne, sql } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type {
   GetAlbumByTokenRoute,
@@ -169,6 +169,9 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
           createdAt: fav.createdAt,
         }));
 
+        // Count of favorites with non-empty notes
+        const notesCount = imageFavorites.filter((fav) => fav.notes && fav.notes.trim() !== '').length;
+
         // Find user's favorite for this image
         const userFavorite = clientName
           ? imageFavorites.find((fav) => fav.clientName === clientName)
@@ -183,6 +186,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
           url: await generateImageUrl(img.b2FileName, c.env),
           thumbnailUrl: img.b2FileName ? await generateThumbnailUrl(img.b2FileName, c.env) : null,
           favoriteCount: imageFavorites.length,
+          notesCount,
           comments,
           userFavorite: userFavorite
             ? {
@@ -334,6 +338,9 @@ export const getFavoriteImages: AppRouteHandler<GetFavoriteImagesRoute> = async 
           createdAt: fav.createdAt,
         }));
 
+        // Count of favorites with non-empty notes
+        const notesCount = imageFavorites.filter((fav) => fav.notes && fav.notes.trim() !== '').length;
+
         // Find user's favorite
         const userFavorite = imageFavorites.find((fav) => fav.clientName === clientName);
 
@@ -346,6 +353,7 @@ export const getFavoriteImages: AppRouteHandler<GetFavoriteImagesRoute> = async 
           url: await generateImageUrl(img.b2FileName, c.env),
           thumbnailUrl: img.b2FileName ? await generateThumbnailUrl(img.b2FileName, c.env) : null,
           favoriteCount: imageFavorites.length,
+          notesCount,
           comments,
           userFavorite: userFavorite
             ? {
