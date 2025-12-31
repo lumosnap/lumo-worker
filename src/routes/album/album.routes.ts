@@ -58,7 +58,6 @@ const confirmUploadSchema = z.object({
     height: z.number(),
     uploadOrder: z.number(),
     thumbnailB2FileId: z.string().nullable().optional(),
-    thumbnailB2FileName: z.string().nullable().optional(),
     thumbnailKey: z.string().nullable().optional(),
   }))
 });
