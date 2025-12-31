@@ -92,6 +92,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
       width: number;
       height: number;
       createdAt: Date;
+      thumbnailB2FileId: string | null;
       thumbnailB2FileName: string | null;
     }>;
 
@@ -105,6 +106,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
           width: images.width,
           height: images.height,
           createdAt: images.createdAt,
+          thumbnailB2FileId: images.thumbnailB2FileId,
           thumbnailB2FileName: images.thumbnailB2FileName,
         })
         .from(images)
@@ -136,6 +138,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
           width: images.width,
           height: images.height,
           createdAt: images.createdAt,
+          thumbnailB2FileId: images.thumbnailB2FileId,
           thumbnailB2FileName: images.thumbnailB2FileName,
         })
         .from(images)
@@ -193,7 +196,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
           height: img.height,
           createdAt: img.createdAt,
           url: await generateImageUrl(img.b2FileName, c.env),
-          thumbnailUrl: img.thumbnailB2FileName ? await generateThumbnailUrl(img.thumbnailB2FileName, c.env) : null,
+          thumbnailUrl: img.thumbnailB2FileId && img.thumbnailB2FileName ? await generateThumbnailUrl(img.thumbnailB2FileName, c.env) : null,
           favoriteCount: imageFavorites.length,
           notesCount,
           comments,
@@ -301,6 +304,7 @@ export const getFavoriteImages: AppRouteHandler<GetFavoriteImagesRoute> = async 
         width: images.width,
         height: images.height,
         createdAt: images.createdAt,
+        thumbnailB2FileId: images.thumbnailB2FileId,
         thumbnailB2FileName: images.thumbnailB2FileName,
       })
       .from(images)
@@ -361,7 +365,7 @@ export const getFavoriteImages: AppRouteHandler<GetFavoriteImagesRoute> = async 
           height: img.height,
           createdAt: img.createdAt,
           url: await generateImageUrl(img.b2FileName, c.env),
-          thumbnailUrl: img.thumbnailB2FileName ? await generateThumbnailUrl(img.thumbnailB2FileName, c.env) : null,
+          thumbnailUrl: img.thumbnailB2FileId && img.thumbnailB2FileName ? await generateThumbnailUrl(img.thumbnailB2FileName, c.env) : null,
           favoriteCount: imageFavorites.length,
           notesCount,
           comments,
