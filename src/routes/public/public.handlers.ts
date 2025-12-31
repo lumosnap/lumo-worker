@@ -45,19 +45,25 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
     }
 
     // Get owner profile info (businessName or username)
-    const [profile] = album.userId ? await db
+    const [profile] = await db
       .select({
         businessName: profiles.businessName,
       })
       .from(profiles)
-      .where(eq(profiles.userId, album.userId)) : [undefined];
+      .where(and(
+        eq(profiles.userId, album.userId!),
+        isNotNull(profiles.userId)
+      ));
 
-    const [owner] = album.userId ? await db
+    const [owner] = await db
       .select({
         name: user.name,
       })
       .from(user)
-      .where(eq(user.id, album.userId)) : [undefined];
+      .where(and(
+        eq(user.id, album.userId!),
+        isNotNull(user.id)
+      ));
 
     const ownerName = profile?.businessName || owner?.name || null;
 
@@ -306,7 +312,7 @@ export const getFavoriteImages: AppRouteHandler<GetFavoriteImagesRoute> = async 
       .where(
         and(
           eq(favorites.albumId, album.id),
-          clientFavorites[0].imageId !== null ? eq(favorites.imageId, clientFavorites[0].imageId!) : undefined
+          clientFavorites[0].imageId !== null ? eq(favorites.imageId, clientFavorites[0].imageId!) : sql`TRUE`
         )
       );
 
