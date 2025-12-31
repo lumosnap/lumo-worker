@@ -36,10 +36,9 @@ export const useBackBlaze = async (env: Environment) => {
   };
 
   const getPublicUrl = (key: string, isThumbnail = false) => {
-    // For B2 S3 Compatible API, the public URL format is: https://s3.region.backblazeb2.com/bucket-name/key
+    // Public URL format: BACKBLAZE_PUBLIC_URL_BASE/BACKBLAZE_BUCKET_NAME/album_id/original_filename
     const bucketName = env.BACKBLAZE_BUCKET_NAME;
-    const region = 'eu-central-003';
-    return `https://s3.${region}.backblazeb2.com/${bucketName}/${key}`;
+    return `${env.BACKBLAZE_PUBLIC_URL_BASE}/${bucketName}/${key}`;
   };
 
   const deleteFile = async (fileId: string) => {

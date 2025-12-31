@@ -76,7 +76,7 @@ export const getAlbumByTokenRoute = createRoute({
       clientName: z.string().optional(),
       favorites: z.string().optional(),
       page: z.string().optional().transform((val) => val ? parseInt(val) : 1),
-      limit: z.string().optional().transform((val) => val ? parseInt(val) : 20),
+      limit: z.string().optional().transform((val) => val ? parseInt(val) : 80),
     }),
   },
   responses: {

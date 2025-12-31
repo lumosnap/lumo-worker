@@ -129,20 +129,29 @@ const bulkDeleteImagesResponseSchema = z.object({
   }).optional(),
 });
 
-const favoriteSchema = z.object({
-  id: z.number(),
-  albumId: z.string().nullable(),
-  imageId: z.number().nullable(),
+const commentSchema = z.object({
   clientName: z.string(),
   notes: z.string().nullable(),
   createdAt: z.string().datetime(),
-  image: imageSchema.nullable().optional(),
+});
+
+const favoriteImageSchema = z.object({
+  id: z.number(),
+  originalFilename: z.string(),
+  width: z.number(),
+  height: z.number(),
+  createdAt: z.string().datetime(),
+  url: z.string().url(),
+  thumbnailUrl: z.string().url().nullable(),
+  favoriteCount: z.number(),
+  notesCount: z.number(),
+  comments: z.array(commentSchema),
 });
 
 const favoritesResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
-  data: z.array(favoriteSchema).optional(),
+  data: z.array(favoriteImageSchema).optional(),
 });
 
 const createShareLinkResponseSchema = z.object({

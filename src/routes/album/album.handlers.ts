@@ -338,58 +338,90 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
       conditions.push(eq(favorites.clientName, query.clientName));
     }
 
-    // Query favorites with image details
-    const albumFavorites = await db
-      .select({
-        id: favorites.id,
-        albumId: favorites.albumId,
-        imageId: favorites.imageId,
-        clientName: favorites.clientName,
-        notes: favorites.notes,
-        createdAt: favorites.createdAt,
-        image: {
-          id: images.id,
-          albumId: images.albumId,
-          b2FileId: images.b2FileId,
-          b2FileName: images.b2FileName,
-          originalFilename: images.originalFilename,
-          fileSize: images.fileSize,
-          width: images.width,
-          height: images.height,
-          uploadOrder: images.uploadOrder,
-          uploadStatus: images.uploadStatus,
-          thumbnailB2FileId: images.thumbnailB2FileId,
-          thumbnailB2FileName: images.thumbnailB2FileName,
-          createdAt: images.createdAt,
-        }
-      })
+    // Get all favorites for this album
+    const allFavorites = await db
+      .select()
       .from(favorites)
-      .leftJoin(images, eq(favorites.imageId, images.id))
-      .where(and(...conditions))
-      .orderBy(desc(favorites.createdAt));
+      .where(and(...conditions));
 
-    // Add image URLs to the favorites
-    const favoritesWithUrls = albumFavorites.map(favorite => {
-      if (!favorite.image) return favorite;
+    // If no favorites, return empty array
+    if (allFavorites.length === 0) {
+      return c.json(
+        {
+          success: true,
+          message: "Favorites retrieved successfully",
+          data: [],
+        },
+        HttpStatusCodes.OK
+      );
+    }
 
-      const imageKey = favorite.image.b2FileName;
-      const thumbnailKey = favorite.image.thumbnailB2FileName;
+    // Get unique image IDs from favorites
+    const imageIds = [...new Set(allFavorites.map(fav => fav.imageId).filter(Boolean))];
 
-      return {
-        ...favorite,
-        image: {
-          ...favorite.image,
-          url: imageKey ? getPublicUrl(imageKey) : null,
-          thumbnailUrl: thumbnailKey ? getPublicUrl(thumbnailKey) : null,
+    // Get the images
+    const favoritedImages = await db
+      .select({
+        id: images.id,
+        b2FileName: images.b2FileName,
+        originalFilename: images.originalFilename,
+        width: images.width,
+        height: images.height,
+        createdAt: images.createdAt,
+        thumbnailB2FileName: images.thumbnailB2FileName,
+      })
+      .from(images)
+      .where(and(eq(images.albumId, albumId), eq(images.uploadStatus, 'complete')));
+
+    // Filter to only images that have favorites
+    const filteredImages = favoritedImages.filter(img => imageIds.includes(img.id));
+
+    // Build a map of imageId to favorites
+    const favoritesByImage = new Map<number, typeof allFavorites>();
+    for (const fav of allFavorites) {
+      if (fav.imageId !== null) {
+        if (!favoritesByImage.has(fav.imageId)) {
+          favoritesByImage.set(fav.imageId, []);
         }
-      };
-    });
+        favoritesByImage.get(fav.imageId)!.push(fav);
+      }
+    }
+
+    // Generate images with favorite data (same format as public route)
+    const imagesWithFavoriteData = await Promise.all(
+      filteredImages.map(async (img) => {
+        const imageFavorites = favoritesByImage.get(img.id) || [];
+
+        // Build comments array (all favorites for this image)
+        const comments = imageFavorites.map((fav) => ({
+          clientName: fav.clientName,
+          notes: fav.notes,
+          createdAt: fav.createdAt,
+        }));
+
+        // Count of favorites with non-empty notes
+        const notesCount = imageFavorites.filter((fav) => fav.notes && fav.notes.trim() !== '').length;
+
+        return {
+          id: img.id,
+          originalFilename: img.originalFilename,
+          width: img.width,
+          height: img.height,
+          createdAt: img.createdAt,
+          url: getPublicUrl(img.b2FileName),
+          thumbnailUrl: img.thumbnailB2FileName ? getPublicUrl(img.thumbnailB2FileName) : null,
+          favoriteCount: imageFavorites.length,
+          notesCount,
+          comments,
+        };
+      })
+    );
 
     return c.json(
       {
         success: true,
         message: "Favorites retrieved successfully",
-        data: favoritesWithUrls,
+        data: imagesWithFavoriteData,
       },
       HttpStatusCodes.OK
     );
