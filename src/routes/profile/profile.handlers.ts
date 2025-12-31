@@ -13,40 +13,49 @@ import type {
 
 export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
   try {
-    const db = c.get('db');
-
-    // Get user ID from session (this would come from auth middleware)
-    const userId = c.get('user')?.id;
-    if (!userId) {
+    const user = c.get('user');
+    if (!user) {
       return c.json(
         {
           success: false,
-          message: "User not authenticated",
+          message: "Unauthorized",
         },
         HttpStatusCodes.UNAUTHORIZED
       );
     }
 
-    const [profile] = await db
+    const db = c.get('db');
+
+    let [profile] = await db
       .select()
       .from(profiles)
-      .where(eq(profiles.userId, userId));
+      .where(eq(profiles.userId, user.id));
 
+    // Auto-create profile if it doesn't exist
     if (!profile) {
-      return c.json(
-        {
-          success: false,
-          message: "Profile not found",
-        },
-        HttpStatusCodes.NOT_FOUND
-      );
+      const [newProfile] = await db
+        .insert(profiles)
+        .values({
+          userId: user.id,
+          businessName: null,
+          phone: null,
+          storageUsed: 0,
+        })
+        .returning();
+      profile = newProfile;
     }
+
+    // Calculate profileCompleted based on businessName
+    const profileCompleted = !!profile.businessName && profile.businessName.length > 0;
 
     return c.json(
       {
         success: true,
         message: "Profile retrieved successfully",
-        data: profile,
+        data: {
+          ...profile,
+          profileCompleted,
+        },
       },
       HttpStatusCodes.OK
     );
@@ -62,28 +71,95 @@ export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
   }
 };
 
-export const updateProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
+export const patchProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
   try {
-    const db = c.get('db');
-    const body = c.req.valid("json");
-
-    // Get user ID from session
-    const userId = c.get('user')?.id;
-    if (!userId) {
+    const user = c.get('user');
+    if (!user) {
       return c.json(
         {
           success: false,
-          message: "User not authenticated",
+          message: "Unauthorized",
         },
         HttpStatusCodes.UNAUTHORIZED
       );
     }
 
+    const db = c.get('db');
+    const body = c.req.valid("json");
+
     // Check if profile exists
     const [existingProfile] = await db
       .select()
       .from(profiles)
-      .where(eq(profiles.userId, userId));
+      .where(eq(profiles.userId, user.id));
+
+    if (!existingProfile) {
+      return c.json(
+        {
+          success: false,
+          message: "Profile not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // Update profile with partial data
+    const [updatedProfile] = await db
+      .update(profiles)
+      .set({
+        ...body,
+        updatedAt: new Date(),
+      })
+      .where(eq(profiles.userId, user.id))
+      .returning();
+
+    // Calculate profileCompleted based on businessName
+    const profileCompleted = !!updatedProfile.businessName && updatedProfile.businessName.length > 0;
+
+    return c.json(
+      {
+        success: true,
+        message: "Profile updated successfully",
+        data: {
+          ...updatedProfile,
+          profileCompleted,
+        },
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem updating profile",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const updateProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
+    const db = c.get('db');
+    const body = c.req.valid("json");
+
+    // Check if profile exists
+    const [existingProfile] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.userId, user.id));
 
     if (!existingProfile) {
       return c.json(
@@ -102,14 +178,20 @@ export const updateProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
         ...body,
         updatedAt: new Date(),
       })
-      .where(eq(profiles.userId, userId))
+      .where(eq(profiles.userId, user.id))
       .returning();
+
+    // Calculate profileCompleted based on businessName
+    const profileCompleted = !!updatedProfile.businessName && updatedProfile.businessName.length > 0;
 
     return c.json(
       {
         success: true,
         message: "Profile updated successfully",
-        data: updatedProfile,
+        data: {
+          ...updatedProfile,
+          profileCompleted,
+        },
       },
       HttpStatusCodes.OK
     );
@@ -127,25 +209,24 @@ export const updateProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
 
 export const getBillingAddresses: AppRouteHandler<GetBillingAddressesRoute> = async (c) => {
   try {
-    const db = c.get('db');
-
-    // Get user ID from session
-    const userId = c.get('user')?.id;
-    if (!userId) {
+    const user = c.get('user');
+    if (!user) {
       return c.json(
         {
           success: false,
-          message: "User not authenticated",
+          message: "Unauthorized",
         },
         HttpStatusCodes.UNAUTHORIZED
       );
     }
 
+    const db = c.get('db');
+
     // First get the profile ID
     const [profile] = await db
       .select({ id: profiles.id })
       .from(profiles)
-      .where(eq(profiles.userId, userId));
+      .where(eq(profiles.userId, user.id));
 
     if (!profile) {
       return c.json(
@@ -186,26 +267,25 @@ export const getBillingAddresses: AppRouteHandler<GetBillingAddressesRoute> = as
 
 export const createBillingAddress: AppRouteHandler<CreateBillingAddressRoute> = async (c) => {
   try {
-    const db = c.get('db');
-    const body = c.req.valid("json");
-
-    // Get user ID from session
-    const userId = c.get('user')?.id;
-    if (!userId) {
+    const user = c.get('user');
+    if (!user) {
       return c.json(
         {
           success: false,
-          message: "User not authenticated",
+          message: "Unauthorized",
         },
         HttpStatusCodes.UNAUTHORIZED
       );
     }
 
+    const db = c.get('db');
+    const body = c.req.valid("json");
+
     // Get profile ID
     const [profile] = await db
       .select({ id: profiles.id })
       .from(profiles)
-      .where(eq(profiles.userId, userId));
+      .where(eq(profiles.userId, user.id));
 
     if (!profile) {
       return c.json(
@@ -256,27 +336,26 @@ export const createBillingAddress: AppRouteHandler<CreateBillingAddressRoute> = 
 
 export const updateBillingAddress: AppRouteHandler<UpdateBillingAddressRoute> = async (c) => {
   try {
-    const db = c.get('db');
-    const { addressId } = c.req.valid("param");
-    const body = c.req.valid("json");
-
-    // Get user ID from session
-    const userId = c.get('user')?.id;
-    if (!userId) {
+    const user = c.get('user');
+    if (!user) {
       return c.json(
         {
           success: false,
-          message: "User not authenticated",
+          message: "Unauthorized",
         },
         HttpStatusCodes.UNAUTHORIZED
       );
     }
 
+    const db = c.get('db');
+    const { addressId } = c.req.valid("param");
+    const body = c.req.valid("json");
+
     // Get profile ID
     const [profile] = await db
       .select({ id: profiles.id })
       .from(profiles)
-      .where(eq(profiles.userId, userId));
+      .where(eq(profiles.userId, user.id));
 
     if (!profile) {
       return c.json(
@@ -341,26 +420,25 @@ export const updateBillingAddress: AppRouteHandler<UpdateBillingAddressRoute> = 
 
 export const deleteBillingAddress: AppRouteHandler<DeleteBillingAddressRoute> = async (c) => {
   try {
-    const db = c.get('db');
-    const { addressId } = c.req.valid("param");
-
-    // Get user ID from session
-    const userId = c.get('user')?.id;
-    if (!userId) {
+    const user = c.get('user');
+    if (!user) {
       return c.json(
         {
           success: false,
-          message: "User not authenticated",
+          message: "Unauthorized",
         },
         HttpStatusCodes.UNAUTHORIZED
       );
     }
 
+    const db = c.get('db');
+    const { addressId } = c.req.valid("param");
+
     // Get profile ID
     const [profile] = await db
       .select({ id: profiles.id })
       .from(profiles)
-      .where(eq(profiles.userId, userId));
+      .where(eq(profiles.userId, user.id));
 
     if (!profile) {
       return c.json(

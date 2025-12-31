@@ -14,6 +14,7 @@ const profileSchema = z.object({
   businessName: z.string().nullable(),
   phone: z.string().nullable(),
   storageUsed: z.number().nullable(),
+  profileCompleted: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -77,6 +78,39 @@ export const getProfileRoute = createRoute({
     [HttpStatusCodes.OK]: jsonContent(
       profileResponseSchema,
       "Profile retrieved successfully",
+    ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      errorResponseSchema,
+      "Profile not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      errorResponseSchema,
+      "Internal server error",
+    ),
+  },
+});
+
+// PATCH update profile (partial update)
+export const patchProfileRoute = createRoute({
+  tags: ["Profile"],
+  method: "patch",
+  summary: "Partially update user profile",
+  description: "Update specific fields in the current user's profile information",
+  path: "/profile",
+  request: {
+    body: jsonContent(
+      updateProfileSchema,
+      "Profile update data (partial)",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      profileResponseSchema,
+      "Profile updated successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
       errorResponseSchema,
@@ -256,6 +290,7 @@ export const deleteBillingAddressRoute = createRoute({
 
 export type GetProfileRoute = typeof getProfileRoute;
 export type UpdateProfileRoute = typeof updateProfileRoute;
+export type PatchProfileRoute = typeof patchProfileRoute;
 export type GetBillingAddressesRoute = typeof getBillingAddressesRoute;
 export type CreateBillingAddressRoute = typeof createBillingAddressRoute;
 export type UpdateBillingAddressRoute = typeof updateBillingAddressRoute;
