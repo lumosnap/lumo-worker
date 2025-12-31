@@ -52,12 +52,14 @@ const confirmUploadSchema = z.object({
   images: z.array(z.object({
     filename: z.string(),
     b2FileId: z.string(),
+    key: z.string(),
     fileSize: z.number(),
     width: z.number(),
     height: z.number(),
     uploadOrder: z.number(),
     thumbnailB2FileId: z.string().nullable().optional(),
     thumbnailB2FileName: z.string().nullable().optional(),
+    thumbnailKey: z.string().nullable().optional(),
   }))
 });
 

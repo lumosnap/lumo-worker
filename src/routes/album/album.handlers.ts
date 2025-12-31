@@ -235,18 +235,18 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
     let failedDeletions = 0;
     const BATCH_SIZE = 10;
 
-    // Collect all file IDs to delete
-    const fileIdsToDelete: string[] = [];
+    // Collect all file names to delete
+    const fileNamesToDelete: string[] = [];
     for (const image of albumImages) {
-      if (image.b2FileId) fileIdsToDelete.push(image.b2FileId);
-      if (image.thumbnailB2FileId) fileIdsToDelete.push(image.thumbnailB2FileId);
+      if (image.b2FileName) fileNamesToDelete.push(image.b2FileName);
+      if (image.thumbnailB2FileName) fileNamesToDelete.push(image.thumbnailB2FileName);
     }
 
     // Delete in batches
-    for (let i = 0; i < fileIdsToDelete.length; i += BATCH_SIZE) {
-      const batch = fileIdsToDelete.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < fileNamesToDelete.length; i += BATCH_SIZE) {
+      const batch = fileNamesToDelete.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(fileId => deleteFile(fileId))
+        batch.map(fileName => deleteFile(fileName))
       );
 
       for (const result of results) {
@@ -614,20 +614,19 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
     // Save image metadata to database
     const savedImages = await Promise.all(
       uploadedImages.map(async (img) => {
-        const key = `${albumId}/${img.filename}`;
         const [savedImage] = await db
           .insert(images)
           .values({
             albumId,
             b2FileId: img.b2FileId,
-            b2FileName: key,
+            b2FileName: img.key,
             originalFilename: img.filename,
             fileSize: img.fileSize,
             width: img.width,
             height: img.height,
             uploadOrder: img.uploadOrder,
             thumbnailB2FileId: img.thumbnailB2FileId,
-            thumbnailB2FileName: img.thumbnailB2FileName,
+            thumbnailB2FileName: img.thumbnailKey,
             uploadStatus: 'complete',
           })
           .returning({
@@ -848,11 +847,11 @@ export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
 
     // Delete file from Backblaze B2
     try {
-      if (image.b2FileId) {
-        await deleteFile(image.b2FileId);
+      if (image.b2FileName) {
+        await deleteFile(image.b2FileName);
       }
-      if (image.thumbnailB2FileId) {
-        await deleteFile(image.thumbnailB2FileId);
+      if (image.thumbnailB2FileName) {
+        await deleteFile(image.thumbnailB2FileName);
       }
     } catch (deleteError) {
       console.error("Failed to delete file from storage:", deleteError);
@@ -958,11 +957,11 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
     for (const image of imagesToRemove) {
       try {
         // Delete file from Backblaze B2
-        if (image.b2FileId) {
-          await deleteFile(image.b2FileId);
+        if (image.b2FileName) {
+          await deleteFile(image.b2FileName);
         }
-        if (image.thumbnailB2FileId) {
-          await deleteFile(image.thumbnailB2FileId);
+        if (image.thumbnailB2FileName) {
+          await deleteFile(image.thumbnailB2FileName);
         }
 
         // Delete image from database

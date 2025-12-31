@@ -16,19 +16,34 @@ export const useBackBlaze = async (env: Environment) => {
   const getSignedUrls = async (files: Array<{ filename: string }>, albumId: string) => {
     const uploadUrls = await Promise.all(
       files.map(async (file) => {
-        const key = `${albumId}/${file.filename}`;
-        const command = new PutObjectCommand({
+        // Generate key for original image in originals/ subfolder
+        const originalKey = `${albumId}/originals/${file.filename}`;
+        const originalCommand = new PutObjectCommand({
           Bucket: env.BACKBLAZE_BUCKET_NAME,
-          Key: key,
-          ContentType: 'image/avif', // or image/webp
+          Key: originalKey,
+          ContentType: 'image/webp',
         });
-        const url = await getSignedUrl(s3Client, command, {
+        const originalUrl = await getSignedUrl(s3Client, originalCommand, {
           expiresIn: 3600,
         });
+
+        // Generate key for thumbnail in thumbnails/ subfolder
+        const thumbnailKey = `${albumId}/thumbnails/${file.filename}`;
+        const thumbnailCommand = new PutObjectCommand({
+          Bucket: env.BACKBLAZE_BUCKET_NAME,
+          Key: thumbnailKey,
+          ContentType: 'image/webp',
+        });
+        const thumbnailUrl = await getSignedUrl(s3Client, thumbnailCommand, {
+          expiresIn: 3600,
+        });
+
         return {
           filename: file.filename,
-          uploadUrl: url,
-          key: key,
+          uploadUrl: originalUrl,
+          key: originalKey,
+          thumbnailUploadUrl: thumbnailUrl,
+          thumbnailKey: thumbnailKey,
         };
       })
     );
