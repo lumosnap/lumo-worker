@@ -266,14 +266,21 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
       .delete(albums)
       .where(eq(albums.id, albumId));
 
-    // Update profile's totalImages
-    await db
-      .update(profiles)
-      .set({
-        totalImages: sql`GREATEST(0, ${profiles.totalImages} - ${albumImages.length})`,
-        updatedAt: new Date(),
-      })
+    // Update profile's totalImages only if profile exists
+    const [existingProfile] = await db
+      .select({ id: profiles.id })
+      .from(profiles)
       .where(eq(profiles.userId, user.id));
+
+    if (existingProfile) {
+      await db
+        .update(profiles)
+        .set({
+          totalImages: sql`GREATEST(0, ${profiles.totalImages} - ${albumImages.length})`,
+          updatedAt: new Date(),
+        })
+        .where(eq(profiles.userId, user.id));
+    }
 
     console.log(`Album ${albumId} deleted. Files deleted: ${deletedFiles}, Failed: ${failedDeletions}`);
 
@@ -467,7 +474,25 @@ export const createAlbum: AppRouteHandler<CreateAlbumRoute> = async (c) => {
     const { createId } = await import('@paralleldrive/cuid2');
     const db = c.get('db');
     const body = c.req.valid("json");
-    const id = createId()
+    const id = createId();
+
+    // Ensure profile exists
+    const [existingProfile] = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.userId, user.id));
+
+    if (!existingProfile) {
+      await db
+        .insert(profiles)
+        .values({
+          userId: user.id,
+          businessName: null,
+          phone: null,
+          storageUsed: 0,
+          totalImages: 0,
+        });
+    }
 
     // Use the authenticated user's ID, not the request body
     const valuesToInsert: any = {
@@ -562,13 +587,27 @@ export const generateUploadUrl: AppRouteHandler<GenerateUploadUrlRoute> = async 
       );
     }
 
-    // Check global max images threshold
-    const [profile] = await db
+    // Ensure profile exists
+    let [profile] = await db
       .select({ totalImages: profiles.totalImages })
       .from(profiles)
       .where(eq(profiles.userId, user.id));
 
-    if (profile && profile.totalImages >= GLOBAL_MAX_IMAGES) {
+    if (!profile) {
+      await db
+        .insert(profiles)
+        .values({
+          userId: user.id,
+          businessName: null,
+          phone: null,
+          storageUsed: 0,
+          totalImages: 0,
+        });
+      profile = { totalImages: 0 };
+    }
+
+    // Check global max images threshold
+    if (profile.totalImages >= GLOBAL_MAX_IMAGES) {
       return c.json(
         {
           success: false,

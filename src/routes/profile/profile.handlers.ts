@@ -41,6 +41,7 @@ export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
           businessName: null,
           phone: null,
           storageUsed: 0,
+          totalImages: 0,
         })
         .returning();
       profile = newProfile;
