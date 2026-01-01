@@ -7,6 +7,7 @@ export const profiles = pgTable("profiles", {
   businessName: varchar("business_name", { length: 255 }),
   phone: varchar("phone", { length: 20 }),
   storageUsed: bigint("storage_used", { mode: "number" }).default(0),
+  totalImages: integer("total_images").default(0).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => {

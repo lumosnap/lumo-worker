@@ -1,9 +1,11 @@
 import { albums, images, favorites } from "@/db/schema/albums";
+import { profiles } from "@/db/schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from 'drizzle-orm';
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute } from "./album.routes";
 import { useBackBlaze } from "@/lib/backblaze";
+import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 
 // Create or get share link
 export const createShareLink: AppRouteHandler<CreateShareLinkRoute> = async (c) => {
@@ -263,6 +265,15 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
     await db
       .delete(albums)
       .where(eq(albums.id, albumId));
+
+    // Update profile's totalImages
+    await db
+      .update(profiles)
+      .set({
+        totalImages: sql`GREATEST(0, ${profiles.totalImages} - ${albumImages.length})`,
+        updatedAt: new Date(),
+      })
+      .where(eq(profiles.userId, user.id));
 
     console.log(`Album ${albumId} deleted. Files deleted: ${deletedFiles}, Failed: ${failedDeletions}`);
 
@@ -551,6 +562,22 @@ export const generateUploadUrl: AppRouteHandler<GenerateUploadUrlRoute> = async 
       );
     }
 
+    // Check global max images threshold
+    const [profile] = await db
+      .select({ totalImages: profiles.totalImages })
+      .from(profiles)
+      .where(eq(profiles.userId, user.id));
+
+    if (profile && profile.totalImages >= GLOBAL_MAX_IMAGES) {
+      return c.json(
+        {
+          success: false,
+          message: `Maximum image limit of ${GLOBAL_MAX_IMAGES} reached. Cannot upload more images.`,
+        },
+        HttpStatusCodes.FORBIDDEN
+      );
+    }
+
     const { getSignedUrls } = await useBackBlaze(c.env)
     const urls = await getSignedUrls(files, albumId)
     return c.json(
@@ -658,6 +685,15 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
         updatedAt: new Date(),
       })
       .where(eq(albums.id, albumId));
+
+    // Update profile's totalImages
+    await db
+      .update(profiles)
+      .set({
+        totalImages: sql`${profiles.totalImages} + ${savedImages.length}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(profiles.userId, user.id));
 
     return c.json(
       {
@@ -877,6 +913,15 @@ export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
       })
       .where(eq(albums.id, albumId));
 
+    // Update profile's totalImages
+    await db
+      .update(profiles)
+      .set({
+        totalImages: sql`GREATEST(0, ${profiles.totalImages} - 1)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(profiles.userId, user.id));
+
     return c.json(
       {
         success: true,
@@ -988,6 +1033,15 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
         updatedAt: new Date(),
       })
       .where(eq(albums.id, albumId));
+
+    // Update profile's totalImages
+    await db
+      .update(profiles)
+      .set({
+        totalImages: sql`GREATEST(0, ${profiles.totalImages} - ${deletedCount})`,
+        updatedAt: new Date(),
+      })
+      .where(eq(profiles.userId, user.id));
 
     return c.json(
       {

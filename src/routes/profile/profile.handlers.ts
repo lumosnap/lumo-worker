@@ -2,6 +2,7 @@ import { profiles, billingAddresses } from "@/db/schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, and, desc } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
+import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 import type {
   GetProfileRoute,
   UpdateProfileRoute,
@@ -55,6 +56,7 @@ export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
         data: {
           ...profile,
           profileCompleted,
+          globalMaxImages: GLOBAL_MAX_IMAGES,
         },
       },
       HttpStatusCodes.OK
@@ -123,6 +125,7 @@ export const patchProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
         data: {
           ...updatedProfile,
           profileCompleted,
+          globalMaxImages: GLOBAL_MAX_IMAGES,
         },
       },
       HttpStatusCodes.OK
@@ -191,6 +194,7 @@ export const updateProfile: AppRouteHandler<UpdateProfileRoute> = async (c) => {
         data: {
           ...updatedProfile,
           profileCompleted,
+          globalMaxImages: GLOBAL_MAX_IMAGES,
         },
       },
       HttpStatusCodes.OK
