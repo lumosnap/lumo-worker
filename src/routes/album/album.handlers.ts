@@ -362,6 +362,9 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
       .from(favorites)
       .where(and(...conditions));
 
+    // Extract unique clientNames
+    const uniqueClientNames = [...new Set(allFavorites.map(fav => fav.clientName))];
+
     // If no favorites, return empty array
     if (allFavorites.length === 0) {
       return c.json(
@@ -369,6 +372,7 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
           success: true,
           message: "Favorites retrieved successfully",
           data: [],
+          clientNames: [],
         },
         HttpStatusCodes.OK
       );
@@ -441,6 +445,7 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
         success: true,
         message: "Favorites retrieved successfully",
         data: imagesWithFavoriteData,
+        clientNames: uniqueClientNames,
       },
       HttpStatusCodes.OK
     );

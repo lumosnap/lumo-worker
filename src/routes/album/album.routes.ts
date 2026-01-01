@@ -176,6 +176,7 @@ const favoritesResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   data: z.array(favoriteImageSchema).optional(),
+  clientNames: z.array(z.string()),
 });
 
 const createShareLinkResponseSchema = z.object({
