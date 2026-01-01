@@ -72,6 +72,29 @@ const confirmUploadResponseSchema = z.object({
   })).optional()
 })
 
+const updateImagesSchema = z.object({
+  images: z.array(z.object({
+    imageId: z.number(),
+    b2FileId: z.string(),
+    b2FileName: z.string(),
+    fileSize: z.number(),
+    width: z.number(),
+    height: z.number(),
+    thumbnailB2FileId: z.string().nullable().optional(),
+    thumbnailB2FileName: z.string().nullable().optional(),
+  }))
+});
+
+const updateImagesResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(z.object({
+    id: z.number(),
+    originalFilename: z.string(),
+    b2FileName: z.string(),
+  })).optional()
+})
+
 const imageSchema = z.object({
   id: z.number(),
   albumId: z.string().nullable(),
@@ -401,6 +424,57 @@ export const confirmUploadRoute = createRoute({
   },
 })
 
+export const updateImagesRoute = createRoute({
+  tags: ["Albums"],
+  method: "patch",
+  summary: "Update existing images",
+  description: "Update image metadata after re-uploading files to storage. Old files will be deleted from Backblaze.",
+  path: "/albums/:albumId/images",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+    body: jsonContent(
+      updateImagesSchema,
+      "Image metadata to update",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      updateImagesResponseSchema,
+      "Images updated successfully",
+    ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "User not authenticated",
+    ),
+    [HttpStatusCodes.FORBIDDEN]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "User doesn't own this album",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Album or image not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+})
+
 export const getAlbumImagesRoute = createRoute({
   tags: ["Albums"],
   method: "get",
@@ -649,6 +723,7 @@ export type ListAlbumsRoute = typeof listAlbumsRoute;
 export type CreateAlbumRoute = typeof createAlbumRoute;
 export type GenerateUploadUrlRoute = typeof generateUploadUrlRoute;
 export type ConfirmUploadRoute = typeof confirmUploadRoute;
+export type UpdateImagesRoute = typeof updateImagesRoute;
 export type GetAlbumImagesRoute = typeof getAlbumImagesRoute;
 export type DeleteImageRoute = typeof deleteImageRoute;
 export type BulkDeleteImagesRoute = typeof bulkDeleteImagesRoute;

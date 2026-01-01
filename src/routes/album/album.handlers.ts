@@ -3,7 +3,7 @@ import { profiles } from "@/db/schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, desc, and, sql } from 'drizzle-orm';
 import * as HttpStatusCodes from "stoker/http-status-codes";
-import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute } from "./album.routes";
+import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute } from "./album.routes";
 import { useBackBlaze } from "@/lib/backblaze";
 import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 
@@ -748,6 +748,153 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
       {
         success: false,
         message: "Problem saving upload metadata",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+}
+
+export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
+    const db = c.get('db');
+    const { albumId } = c.req.valid("param");
+    const { images: imagesToUpdate } = c.req.valid("json");
+
+    // Check if album exists and user owns it
+    const [album] = await db.select().from(albums).where(eq(albums.id, albumId));
+    if (!album) {
+      return c.json(
+        {
+          success: false,
+          message: "Album not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    if (album.userId !== user.id) {
+      return c.json(
+        {
+          success: false,
+          message: "Forbidden - you don't own this album",
+        },
+        HttpStatusCodes.FORBIDDEN
+      );
+    }
+
+    const { deleteFile } = await useBackBlaze(c.env);
+
+    // Process each image update
+    const updatedImages = await Promise.all(
+      imagesToUpdate.map(async (img) => {
+        // Get existing image
+        const [existingImage] = await db
+          .select()
+          .from(images)
+          .where(and(eq(images.id, img.imageId), eq(images.albumId, albumId)));
+
+        if (!existingImage) {
+          return null;
+        }
+
+        // Calculate size difference for album totalSize
+        const sizeDiff = img.fileSize - existingImage.fileSize;
+
+        // Delete old files from Backblaze if filenames changed
+        if (img.b2FileName !== existingImage.b2FileName) {
+          try {
+            await deleteFile(existingImage.b2FileName);
+          } catch (error) {
+            console.error(`Failed to delete old B2 file ${existingImage.b2FileName}:`, error);
+          }
+        }
+
+        if (img.thumbnailB2FileName && img.thumbnailB2FileName !== existingImage.thumbnailB2FileName) {
+          try {
+            if (existingImage.thumbnailB2FileName) {
+              await deleteFile(existingImage.thumbnailB2FileName);
+            }
+          } catch (error) {
+            console.error(`Failed to delete old B2 thumbnail ${existingImage.thumbnailB2FileName}:`, error);
+          }
+        }
+
+        // Update image record in database
+        const [updatedImage] = await db
+          .update(images)
+          .set({
+            b2FileId: img.b2FileId,
+            b2FileName: img.b2FileName,
+            fileSize: img.fileSize,
+            width: img.width,
+            height: img.height,
+            thumbnailB2FileId: img.thumbnailB2FileId,
+            thumbnailB2FileName: img.thumbnailB2FileName,
+          })
+          .where(eq(images.id, img.imageId))
+          .returning({
+            id: images.id,
+            originalFilename: images.originalFilename,
+            b2FileName: images.b2FileName,
+          });
+
+        return { updatedImage, sizeDiff };
+      })
+    );
+
+    // Filter out null results (images that weren't found)
+    const validUpdates = updatedImages.filter(u => u !== null);
+    
+    if (validUpdates.length === 0) {
+      return c.json(
+        {
+          success: false,
+          message: "No valid images to update",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // Calculate total size difference
+    const totalSizeDiff = validUpdates.reduce((sum, u) => sum + u!.sizeDiff, 0);
+
+    // Update album totalSize
+    await db
+      .update(albums)
+      .set({
+        totalSize: Math.max(0, (album.totalSize || 0) + totalSizeDiff),
+        updatedAt: new Date(),
+      })
+      .where(eq(albums.id, albumId));
+
+    // Extract updated image data for response
+    const responseData = validUpdates.map(u => u!.updatedImage);
+
+    return c.json(
+      {
+        success: true,
+        message: "Images updated successfully",
+        data: responseData,
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem updating images",
       },
       HttpStatusCodes.INTERNAL_SERVER_ERROR
     );
