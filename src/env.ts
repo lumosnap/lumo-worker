@@ -15,13 +15,25 @@ const EnvSchema = z.object({
   GOOGLE_DESKTOP_CLIENT_SECRET:z.string().min(1).max(128),
   BETTER_AUTH_SECRET: z.string().min(32).max(128),
   BETTER_AUTH_URL: z.string().min(1).max(256),
-  BACKBLAZE_API_KEY_ID: z.string().min(1).max(128),
-  BACKBLAZE_API_KEY: z.string().min(1).max(128),
-  BACKBLAZE_BUCKET_ID: z.string().min(1).max(128),
-  BACKBLAZE_BUCKET_NAME: z.string().min(1).max(128),
-  BACKBLAZE_PUBLIC_URL_BASE:z.string(),
+  STORAGE_API_KEY_ID: z.string().min(1).max(128),
+  STORAGE_API_KEY: z.string().min(1).max(128),
+  STORAGE_BUCKET_ID: z.string().min(1).max(128),
+  STORAGE_BUCKET_NAME: z.string().min(1).max(128),
+  STORAGE_PUBLIC_URL_BASE:z.string(),
+  STORAGE_API_BASE:z.string(),
+  STORAGE_REGION:z.string(),
+  STORAGE2_API_KEY_ID: z.string().min(1).max(128),
+  STORAGE2_API_KEY: z.string().min(1).max(128),
+  STORAGE2_BUCKET_ID: z.string().min(1).max(128),
+  STORAGE2_BUCKET_NAME: z.string().min(1).max(128),
+  STORAGE2_PUBLIC_URL_BASE:z.string(),
+  STORAGE2_API_BASE:z.string(),
+  STORAGE2_REGION:z.string(),
+
+
   WEB_DOMAIN:z.string(),
   ONBOARDING_URL:z.string(),
+
 
 });
 

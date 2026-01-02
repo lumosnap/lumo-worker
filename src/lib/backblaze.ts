@@ -5,36 +5,67 @@ export const useBackBlaze = async (env: Environment) => {
   const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
 
   const s3Client = new S3Client({
-    region: 'eu-central-003', // your B2 region
-    endpoint: 'https://s3.eu-central-003.backblazeb2.com',
+    region: env.STORAGE_REGION,
+    endpoint: env.STORAGE_API_BASE,
+    forcePathStyle: true,
     credentials: {
-      accessKeyId: env.BACKBLAZE_API_KEY_ID,
-      secretAccessKey: env.BACKBLAZE_API_KEY,
+      accessKeyId: env.STORAGE_API_KEY_ID,
+      secretAccessKey: env.STORAGE_API_KEY,
     },
   });
 
-  const getSignedUrls = async (files: Array<{ filename: string }>, albumId: string) => {
+  const s3Client2 = new S3Client({
+    region: env.STORAGE2_REGION,
+    endpoint: env.STORAGE2_API_BASE,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: env.STORAGE2_API_KEY_ID,
+      secretAccessKey: env.STORAGE2_API_KEY,
+    },
+  });
+
+  const getStorageConfig = (isSecondaryStorage: boolean = false) => {
+    if (isSecondaryStorage) {
+      return {
+        bucketName: env.STORAGE2_BUCKET_NAME,
+        publicUrlBase: env.STORAGE2_PUBLIC_URL_BASE,
+        s3Client: s3Client2,
+      };
+    }
+    return {
+      bucketName: env.STORAGE_BUCKET_NAME,
+      publicUrlBase: env.STORAGE_PUBLIC_URL_BASE,
+      s3Client: s3Client,
+    };
+  };
+
+  const getSignedUrls = async (files: Array<{ filename: string }>, albumId: string, isSecondaryStorage: boolean = false) => {
+    const config = getStorageConfig(isSecondaryStorage);
+    
     const uploadUrls = await Promise.all(
       files.map(async (file) => {
         // Generate key for original image in originals/ subfolder
         const originalKey = `${albumId}/originals/${file.filename}`;
         const originalCommand = new PutObjectCommand({
-          Bucket: env.BACKBLAZE_BUCKET_NAME,
+          Bucket: config.bucketName,
           Key: originalKey,
+          StorageClass:'ONEZONE_IA',
           ContentType: 'image/webp',
         });
-        const originalUrl = await getSignedUrl(s3Client, originalCommand, {
+
+        const originalUrl = await getSignedUrl(config.s3Client, originalCommand, {
           expiresIn: 3600,
         });
 
         // Generate key for thumbnail in thumbnails/ subfolder
         const thumbnailKey = `${albumId}/thumbnails/${file.filename}`;
         const thumbnailCommand = new PutObjectCommand({
-          Bucket: env.BACKBLAZE_BUCKET_NAME,
+          Bucket: config.bucketName,
           Key: thumbnailKey,
+          ACL:'public-read',
           ContentType: 'image/webp',
         });
-        const thumbnailUrl = await getSignedUrl(s3Client, thumbnailCommand, {
+        const thumbnailUrl = await getSignedUrl(config.s3Client, thumbnailCommand, {
           expiresIn: 3600,
         });
 
@@ -50,18 +81,19 @@ export const useBackBlaze = async (env: Environment) => {
     return uploadUrls;
   };
 
-  const getPublicUrl = (key: string, isThumbnail = false) => {
-    // Public URL format: BACKBLAZE_PUBLIC_URL_BASE/BACKBLAZE_BUCKET_NAME/album_id/original_filename
-    const bucketName = env.BACKBLAZE_BUCKET_NAME;
-    return `${env.BACKBLAZE_PUBLIC_URL_BASE}/${bucketName}/${key}`;
+  const getPublicUrl = (key: string, isSecondaryStorage: boolean = false) => {
+    const config = getStorageConfig(isSecondaryStorage);
+    // Public URL format: STORAGE_PUBLIC_URL_BASE/STORAGE_BUCKET_NAME/album_id/original_filename
+    return `${config.publicUrlBase}/${config.bucketName}/${key}`;
   };
 
-  const deleteFile = async (fileId: string) => {
+  const deleteFile = async (fileId: string, isSecondaryStorage: boolean = false) => {
+    const config = getStorageConfig(isSecondaryStorage);
     const command = new DeleteObjectCommand({
-      Bucket: env.BACKBLAZE_BUCKET_NAME,
+      Bucket: config.bucketName,
       Key: fileId,
     });
-    return await s3Client.send(command);
+    return await config.s3Client.send(command);
   };
 
   return {

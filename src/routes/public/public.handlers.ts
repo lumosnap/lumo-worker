@@ -30,6 +30,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
         totalImages: albums.totalImages,
         shareLinkToken: albums.shareLinkToken,
         userId: albums.userId,
+        isSecondaryStorage: albums.isSecondaryStorage,
       })
       .from(albums)
       .where(eq(albums.shareLinkToken, token));
@@ -195,8 +196,8 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
           width: img.width,
           height: img.height,
           createdAt: img.createdAt,
-          url: await generateImageUrl(img.b2FileName, c.env),
-          thumbnailUrl: img.thumbnailB2FileId && img.thumbnailB2FileName ? await generateThumbnailUrl(img.thumbnailB2FileName, c.env) : null,
+          url: await generateImageUrl(img.b2FileName, c.env, album.isSecondaryStorage!),
+          thumbnailUrl: img.thumbnailB2FileId && img.thumbnailB2FileName ? await generateThumbnailUrl(img.thumbnailB2FileName, c.env, album.isSecondaryStorage!) : null,
           favoriteCount: imageFavorites.length,
           notesCount,
           comments,
@@ -259,7 +260,7 @@ export const getFavoriteImages: AppRouteHandler<GetFavoriteImagesRoute> = async 
 
     // Verify album exists
     const [album] = await db
-      .select({ id: albums.id })
+      .select({ id: albums.id, isSecondaryStorage: albums.isSecondaryStorage })
       .from(albums)
       .where(eq(albums.shareLinkToken, token));
 
@@ -364,8 +365,8 @@ export const getFavoriteImages: AppRouteHandler<GetFavoriteImagesRoute> = async 
           width: img.width,
           height: img.height,
           createdAt: img.createdAt,
-          url: await generateImageUrl(img.b2FileName, c.env),
-          thumbnailUrl: img.thumbnailB2FileId && img.thumbnailB2FileName ? await generateThumbnailUrl(img.thumbnailB2FileName, c.env) : null,
+          url: await generateImageUrl(img.b2FileName, c.env, album.isSecondaryStorage!),
+          thumbnailUrl: img.thumbnailB2FileId && img.thumbnailB2FileName ? await generateThumbnailUrl(img.thumbnailB2FileName, c.env, album.isSecondaryStorage!) : null,
           favoriteCount: imageFavorites.length,
           notesCount,
           comments,

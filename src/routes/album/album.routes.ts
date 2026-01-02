@@ -13,6 +13,7 @@ const albumSchema = z.object({
   shareLinkToken: z.string().nullable(),
   expiresAt: z.string().datetime().nullable(),
   isPublic: z.boolean().nullable(),
+  isSecondaryStorage: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   preview_link: z.string().url().nullable(),
@@ -24,6 +25,7 @@ const createAlbumSchema = z.object({
   eventDate: z.string().optional().describe("The date of the event (e.g., '2025-12-31')."),
   expiresAt: z.string().datetime().optional().describe("The expiration date for a share link."),
   isPublic: z.boolean().optional().describe("Whether the album is publicly visible."),
+  isSecondaryStorage: z.boolean().optional().describe("Whether to use secondary storage for this album.").default(false),
 });
 
 const singleAlbumResponseSchema = z.object({
@@ -123,6 +125,7 @@ const albumWithImagesSchema = z.object({
   shareLinkToken: z.string().nullable(),
   expiresAt: z.string().datetime().nullable(),
   isPublic: z.boolean().nullable(),
+  isSecondaryStorage: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   preview_link: z.string().url().nullable(),

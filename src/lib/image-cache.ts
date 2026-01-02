@@ -1,14 +1,18 @@
 import type { Environment } from "@/env";
 
 export const useImageUrlCache = () => {
-  const generateImageUrl = async (imageId: string, env: Environment): Promise<string> => {
-    // Public URL format: BACKBLAZE_PUBLIC_URL_BASE/BACKBLAZE_BUCKET_NAME/album_id/original_filename
-    return `${env.BACKBLAZE_PUBLIC_URL_BASE}/${env.BACKBLAZE_BUCKET_NAME}/${imageId}`;
+  const generateImageUrl = async (imageId: string, env: Environment, isSecondaryStorage: boolean = false): Promise<string> => {
+    // Public URL format: STORAGE_PUBLIC_URL_BASE/STORAGE_BUCKET_NAME/album_id/original_filename
+    const publicUrlBase = isSecondaryStorage ? env.STORAGE2_PUBLIC_URL_BASE : env.STORAGE_PUBLIC_URL_BASE;
+    const bucketName = isSecondaryStorage ? env.STORAGE2_BUCKET_NAME : env.STORAGE_BUCKET_NAME;
+    return `${publicUrlBase}/${bucketName}/${imageId}`;
   };
 
-  const generateThumbnailUrl = async (imageId: string, env: Environment): Promise<string> => {
+  const generateThumbnailUrl = async (imageId: string, env: Environment, isSecondaryStorage: boolean = false): Promise<string> => {
     // Thumbnails use the same key structure, prefix is just metadata
-    return `${env.BACKBLAZE_PUBLIC_URL_BASE}/${env.BACKBLAZE_BUCKET_NAME}/${imageId}`;
+    const publicUrlBase = isSecondaryStorage ? env.STORAGE2_PUBLIC_URL_BASE : env.STORAGE_PUBLIC_URL_BASE;
+    const bucketName = isSecondaryStorage ? env.STORAGE2_BUCKET_NAME : env.STORAGE_BUCKET_NAME;
+    return `${publicUrlBase}/${bucketName}/${imageId}`;
   };
 
   return {

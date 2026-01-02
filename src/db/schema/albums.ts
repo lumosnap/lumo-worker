@@ -11,6 +11,7 @@ export const albums = pgTable("albums", {
   shareLinkToken: varchar("share_link_token", { length: 255 }).unique(),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   isPublic: boolean("is_public").default(true),
+  isSecondaryStorage: boolean("is_secondary_storage").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => {

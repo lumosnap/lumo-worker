@@ -148,7 +148,7 @@ export const listAlbums: AppRouteHandler<ListAlbumsRoute> = async (c) => {
             const imageKey = firstImage.thumbnailB2FileId && firstImage.thumbnailB2FileName ? firstImage.thumbnailB2FileName : firstImage.b2FileName;
             return {
               ...album,
-              preview_link: imageKey ? getPublicUrl(imageKey) : null,
+              preview_link: imageKey ? getPublicUrl(imageKey, album.isSecondaryStorage!) : null,
             };
           }
         }
@@ -248,7 +248,7 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
     for (let i = 0; i < fileNamesToDelete.length; i += BATCH_SIZE) {
       const batch = fileNamesToDelete.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(fileName => deleteFile(fileName))
+        batch.map(fileName => deleteFile(fileName, album.isSecondaryStorage!))
       );
 
       for (const result of results) {
@@ -431,8 +431,8 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
           width: img.width,
           height: img.height,
           createdAt: img.createdAt,
-          url: getPublicUrl(img.b2FileName),
-          thumbnailUrl: img.thumbnailB2FileId && img.thumbnailB2FileName ? getPublicUrl(img.thumbnailB2FileName) : null,
+          url: getPublicUrl(img.b2FileName, album.isSecondaryStorage!),
+          thumbnailUrl: img.thumbnailB2FileId && img.thumbnailB2FileName ? getPublicUrl(img.thumbnailB2FileName, album.isSecondaryStorage!) : null,
           favoriteCount: imageFavorites.length,
           notesCount,
           comments,
@@ -516,6 +516,10 @@ export const createAlbum: AppRouteHandler<CreateAlbumRoute> = async (c) => {
 
     if (body.isPublic !== undefined) {
       valuesToInsert.isPublic = body.isPublic;
+    }
+
+    if (body.isSecondaryStorage !== undefined) {
+      valuesToInsert.isSecondaryStorage = body.isSecondaryStorage;
     }
 
     const [newAlbum] = await db
@@ -623,7 +627,7 @@ export const generateUploadUrl: AppRouteHandler<GenerateUploadUrlRoute> = async 
     }
 
     const { getSignedUrls } = await useBackBlaze(c.env)
-    const urls = await getSignedUrls(files, albumId)
+    const urls = await getSignedUrls(files, albumId, album.isSecondaryStorage!)
     return c.json(
       {
         success: true,
@@ -819,7 +823,7 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
         // Delete old files from Backblaze if filenames changed
         if (img.b2FileName !== existingImage.b2FileName) {
           try {
-            await deleteFile(existingImage.b2FileName);
+            await deleteFile(existingImage.b2FileName, album.isSecondaryStorage!);
           } catch (error) {
             console.error(`Failed to delete old B2 file ${existingImage.b2FileName}:`, error);
           }
@@ -828,7 +832,7 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
         if (img.thumbnailB2FileName && img.thumbnailB2FileName !== existingImage.thumbnailB2FileName) {
           try {
             if (existingImage.thumbnailB2FileName) {
-              await deleteFile(existingImage.thumbnailB2FileName);
+              await deleteFile(existingImage.thumbnailB2FileName, album.isSecondaryStorage!);
             }
           } catch (error) {
             console.error(`Failed to delete old B2 thumbnail ${existingImage.thumbnailB2FileName}:`, error);
@@ -962,7 +966,7 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
     if (albumImages.length > 0) {
       const firstImage = albumImages[0];
       const imageKey = firstImage.thumbnailB2FileId && firstImage.thumbnailB2FileName ? firstImage.thumbnailB2FileName : firstImage.b2FileName;
-      previewLink = imageKey ? getPublicUrl(imageKey) : null;
+      previewLink = imageKey ? getPublicUrl(imageKey, album.isSecondaryStorage!) : null;
     }
 
     // Add image URLs to the images array
@@ -983,8 +987,8 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
         thumbnailB2FileId: image.thumbnailB2FileId,
         thumbnailB2FileName: image.thumbnailB2FileName,
         createdAt: image.createdAt,
-        url: imageKey ? getPublicUrl(imageKey) : null,
-        thumbnailUrl: image.thumbnailB2FileId && thumbnailKey ? getPublicUrl(thumbnailKey) : null,
+        url: imageKey ? getPublicUrl(imageKey, album.isSecondaryStorage!) : null,
+        thumbnailUrl: image.thumbnailB2FileId && thumbnailKey ? getPublicUrl(thumbnailKey, album.isSecondaryStorage!) : null,
       };
     });
 
@@ -1033,7 +1037,7 @@ export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
 
     // Verify album exists and user owns it
     const [album] = await db
-      .select({ totalSize: albums.totalSize, totalImages: albums.totalImages, userId: albums.userId })
+      .select()
       .from(albums)
       .where(eq(albums.id, albumId));
 
@@ -1076,10 +1080,10 @@ export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
     // Delete file from Backblaze B2
     try {
       if (image.b2FileName) {
-        await deleteFile(image.b2FileName);
+        await deleteFile(image.b2FileName, album.isSecondaryStorage!);
       }
       if (image.thumbnailB2FileName) {
-        await deleteFile(image.thumbnailB2FileName);
+        await deleteFile(image.thumbnailB2FileName, album.isSecondaryStorage!);
       }
     } catch (deleteError) {
       console.error("Failed to delete file from storage:", deleteError);
@@ -1153,7 +1157,7 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
 
     // Verify album exists and user owns it
     const [album] = await db
-      .select({ totalSize: albums.totalSize, totalImages: albums.totalImages, userId: albums.userId })
+      .select()
       .from(albums)
       .where(eq(albums.id, albumId));
 
@@ -1195,10 +1199,10 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
       try {
         // Delete file from Backblaze B2
         if (image.b2FileName) {
-          await deleteFile(image.b2FileName);
+          await deleteFile(image.b2FileName, album.isSecondaryStorage!);
         }
         if (image.thumbnailB2FileName) {
-          await deleteFile(image.thumbnailB2FileName);
+          await deleteFile(image.thumbnailB2FileName, album.isSecondaryStorage!);
         }
 
         // Delete image from database
