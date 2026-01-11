@@ -42,7 +42,7 @@ export function createAuth(db: any, env: Environment) {
     },
     plugins: [
       admin({
-        adminRoles: ["admin", "staff"], // Both admin and staff have admin-level permissions
+        adminRoles: ["superadmin", "admin", "staff"], // superadmin, admin, and staff have admin-level permissions
       }),
       bearer(),
     ],

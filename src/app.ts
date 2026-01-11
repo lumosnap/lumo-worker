@@ -8,6 +8,7 @@ import publicRoutes from "@/routes/public/public.index";
 import profile from "@/routes/profile/profile.index";
 import billing from "@/routes/billing/billing.index";
 import index from "@/routes/index.route";
+import admin from "@/routes/admin/admin.index";
 import { createAuth } from "@/lib/auth";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 config();
@@ -30,6 +31,7 @@ const routes = [
   publicRoutes,
   profile,
   billing,
+  admin,
 ] as const;
 
 routes.forEach((route) => {
