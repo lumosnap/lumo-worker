@@ -31,6 +31,7 @@ const EnvSchema = z.object({
   STORAGE2_REGION: z.string(),
   WEB_DOMAIN: z.string(),
   ONBOARDING_URL: z.string(),
+  ADMIN_DOMAIN: z.string(),
   SUPER_ADMIN_EMAIL: z.string(),
 });
 

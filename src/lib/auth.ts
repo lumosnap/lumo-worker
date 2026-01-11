@@ -27,7 +27,7 @@ export function createAuth(db: any, env: Environment) {
     },
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
-    trustedOrigins: ["http://localhost:3000", "http://localhost:5173", env.WEB_DOMAIN, env.ONBOARDING_URL],
+    trustedOrigins: ["http://localhost:3000", "http://localhost:5173", env.WEB_DOMAIN, env.ONBOARDING_URL, env.ADMIN_DOMAIN],
     session: {
       expiresIn: 60 * 60 * 24 * 7, // 7 days total session lifetime in database
       updateAge: 60 * 60 * 24, // Update session after 1 day of inactivity

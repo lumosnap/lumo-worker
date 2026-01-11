@@ -45,7 +45,8 @@ export default function createApp() {
         'http://localhost:3000',
         'http://localhost:5173',
         c.env.WEB_DOMAIN,
-        c.env.ONBOARDING_URL
+        c.env.ONBOARDING_URL,
+        c.env.ADMIN_DOMAIN
       ].filter(Boolean);
 
       // Allow requests with no origin (like mobile apps or curl)
