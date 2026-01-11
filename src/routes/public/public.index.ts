@@ -7,6 +7,8 @@ const router = createRouter()
   .openapi(routes.getFavoriteImagesRoute, handlers.getFavoriteImages)
   .openapi(routes.createFavoriteRoute, handlers.createFavorite)
   .openapi(routes.deleteFavoriteRoute, handlers.deleteFavorite)
-  .openapi(routes.updateNotesRoute, handlers.updateNotes);
+  .openapi(routes.updateNotesRoute, handlers.updateNotes)
+  .openapi(routes.getPhotographerDetailsRoute, handlers.getPhotographerDetails)
+  .openapi(routes.createBookingRoute, handlers.createBooking);
 
 export default router;

@@ -288,6 +288,35 @@ export const deleteBillingAddressRoute = createRoute({
   },
 });
 
+// GET booking URL
+export const getBookingUrlRoute = createRoute({
+  tags: ["Profile"],
+  method: "get",
+  summary: "Get booking URL",
+  description: "Generate the public booking URL for the current photographer",
+  path: "/profile/booking-url",
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+        data: z.object({
+          bookingUrl: z.string().url(),
+        }).optional(),
+      }),
+      "Booking URL generated successfully",
+    ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      errorResponseSchema,
+      "Internal server error",
+    ),
+  },
+});
+
 export type GetProfileRoute = typeof getProfileRoute;
 export type UpdateProfileRoute = typeof updateProfileRoute;
 export type PatchProfileRoute = typeof patchProfileRoute;
@@ -295,3 +324,4 @@ export type GetBillingAddressesRoute = typeof getBillingAddressesRoute;
 export type CreateBillingAddressRoute = typeof createBillingAddressRoute;
 export type UpdateBillingAddressRoute = typeof updateBillingAddressRoute;
 export type DeleteBillingAddressRoute = typeof deleteBillingAddressRoute;
+export type GetBookingUrlRoute = typeof getBookingUrlRoute;

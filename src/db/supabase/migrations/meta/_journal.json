@@ -78,6 +78,13 @@
       "when": 1768111608770,
       "tag": "0010_watery_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1768114678924,
+      "tag": "0011_opposite_kree",
+      "breakpoints": true
     }
   ]
 }

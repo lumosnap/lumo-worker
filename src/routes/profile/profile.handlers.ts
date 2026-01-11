@@ -10,7 +10,8 @@ import type {
   GetBillingAddressesRoute,
   CreateBillingAddressRoute,
   UpdateBillingAddressRoute,
-  DeleteBillingAddressRoute
+  DeleteBillingAddressRoute,
+  GetBookingUrlRoute
 } from "./profile.routes";
 
 export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
@@ -511,6 +512,45 @@ export const deleteBillingAddress: AppRouteHandler<DeleteBillingAddressRoute> = 
       {
         success: false,
         message: "Problem deleting billing address",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const getBookingUrl: AppRouteHandler<GetBookingUrlRoute> = async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
+    // Generate booking URL using WEB_DOMAIN from env
+    const webDomain = c.env.WEB_DOMAIN;
+    const bookingUrl = `${webDomain}/booking/${user.id}`;
+
+    return c.json(
+      {
+        success: true,
+        message: "Booking URL generated successfully",
+        data: {
+          bookingUrl,
+        },
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem generating booking URL",
       },
       HttpStatusCodes.INTERNAL_SERVER_ERROR
     );

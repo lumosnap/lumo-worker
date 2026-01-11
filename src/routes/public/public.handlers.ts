@@ -1,6 +1,7 @@
 import { albums, images, favorites } from "@/db/schema/albums";
 import { profiles } from "@/db/schema/profiles";
 import { user } from "@/db/schema/auth";
+import { bookings } from "@/db/schema/bookings";
 import type { AppRouteHandler } from "@/lib/types";
 import { useImageUrlCache } from "@/lib/image-cache";
 import { eq, and, desc, count, isNotNull, ne, sql } from "drizzle-orm";
@@ -10,7 +11,9 @@ import type {
   GetFavoriteImagesRoute,
   CreateFavoriteRoute,
   DeleteFavoriteRoute,
-  UpdateNotesRoute
+  UpdateNotesRoute,
+  GetPhotographerDetailsRoute,
+  CreateBookingRoute
 } from "./public.routes";
 
 export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) => {
@@ -203,10 +206,10 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
           comments,
           userFavorite: userFavorite
             ? {
-                id: userFavorite.id,
-                notes: userFavorite.notes,
-                createdAt: userFavorite.createdAt,
-              }
+              id: userFavorite.id,
+              notes: userFavorite.notes,
+              createdAt: userFavorite.createdAt,
+            }
             : null,
         };
       })
@@ -372,10 +375,10 @@ export const getFavoriteImages: AppRouteHandler<GetFavoriteImagesRoute> = async 
           comments,
           userFavorite: userFavorite
             ? {
-                id: userFavorite.id,
-                notes: userFavorite.notes,
-                createdAt: userFavorite.createdAt,
-              }
+              id: userFavorite.id,
+              notes: userFavorite.notes,
+              createdAt: userFavorite.createdAt,
+            }
             : null,
         };
       })
@@ -635,6 +638,119 @@ export const updateNotes: AppRouteHandler<UpdateNotesRoute> = async (c) => {
       {
         success: false,
         message: "Problem updating notes",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const getPhotographerDetails: AppRouteHandler<GetPhotographerDetailsRoute> = async (c) => {
+  try {
+    const db = c.get('db');
+    const { photographerId } = c.req.valid("param");
+
+    // Verify photographer (user) exists
+    const [photographer] = await db
+      .select({
+        id: user.id,
+        name: user.name,
+      })
+      .from(user)
+      .where(eq(user.id, photographerId));
+
+    if (!photographer) {
+      return c.json(
+        {
+          success: false,
+          message: "Photographer not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // Get profile details
+    const [profile] = await db
+      .select({
+        businessName: profiles.businessName,
+        phone: profiles.phone,
+      })
+      .from(profiles)
+      .where(eq(profiles.userId, photographerId));
+
+    return c.json(
+      {
+        success: true,
+        message: "Photographer details retrieved successfully",
+        data: {
+          id: photographer.id,
+          businessName: profile?.businessName ?? photographer.name,
+          phone: profile?.phone ?? null,
+        },
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem retrieving photographer details",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const createBooking: AppRouteHandler<CreateBookingRoute> = async (c) => {
+  try {
+    const db = c.get('db');
+    const { photographerId } = c.req.valid("param");
+    const body = c.req.valid("json");
+
+    // Verify photographer (user) exists
+    const [photographer] = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(user.id, photographerId));
+
+    if (!photographer) {
+      return c.json(
+        {
+          success: false,
+          message: "Photographer not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    // Create booking
+    const [newBooking] = await db
+      .insert(bookings)
+      .values({
+        photographerId,
+        eventType: body.eventType,
+        name: body.name,
+        phone: body.phone,
+        eventDate: body.eventDate,
+        location: body.location,
+        details: body.details ?? null,
+      })
+      .returning();
+
+    return c.json(
+      {
+        success: true,
+        message: "Booking created successfully",
+        data: newBooking,
+      },
+      HttpStatusCodes.CREATED
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem creating booking",
       },
       HttpStatusCodes.INTERNAL_SERVER_ERROR
     );

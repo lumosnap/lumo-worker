@@ -5,6 +5,7 @@ export * from './auth';
 export * from './profiles';
 export * from './billing';
 export * from './albums';
+export * from './bookings';
 // Test table
 export const testTable = pgTable('test_table', {
   id: integer('id').primaryKey().notNull().generatedAlwaysAsIdentity({ startWith: 1 }),

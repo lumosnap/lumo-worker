@@ -304,8 +304,129 @@ export const updateNotesRoute = createRoute({
   },
 });
 
+// Photographer details schema
+const photographerDetailsSchema = z.object({
+  id: z.string(),
+  businessName: z.string().nullable(),
+  phone: z.string().nullable(),
+});
+
+// Booking schemas
+const createBookingSchema = z.object({
+  eventType: z.string().min(1).max(100),
+  name: z.string().min(1).max(255),
+  phone: z.string().min(1).max(20),
+  eventDate: z.string(), // ISO date string YYYY-MM-DD
+  location: z.string().min(1).max(500),
+  details: z.string().optional(),
+});
+
+const bookingSchema = z.object({
+  id: z.number(),
+  photographerId: z.string(),
+  eventType: z.string(),
+  name: z.string(),
+  phone: z.string(),
+  eventDate: z.string(),
+  location: z.string(),
+  details: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+const bookingResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: bookingSchema.optional(),
+});
+
+// GET photographer details
+export const getPhotographerDetailsRoute = createRoute({
+  tags: ["Public"],
+  method: "get",
+  summary: "Get photographer details",
+  description: "Retrieve photographer company name and contact details by user ID",
+  path: "/photographer/:photographerId",
+  request: {
+    params: z.object({
+      photographerId: z.string(),
+    }),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+        data: photographerDetailsSchema.optional(),
+      }),
+      "Photographer details retrieved successfully",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Photographer not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+});
+
+// POST create booking
+export const createBookingRoute = createRoute({
+  tags: ["Public"],
+  method: "post",
+  summary: "Create a booking",
+  description: "Create a new booking request for a photographer",
+  path: "/photographer/:photographerId/booking",
+  request: {
+    params: z.object({
+      photographerId: z.string(),
+    }),
+    body: jsonContent(
+      createBookingSchema,
+      "Booking data",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.CREATED]: jsonContent(
+      bookingResponseSchema,
+      "Booking created successfully",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Photographer not found",
+    ),
+    [HttpStatusCodes.BAD_REQUEST]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Invalid booking data",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+});
+
 export type GetAlbumByTokenRoute = typeof getAlbumByTokenRoute;
 export type GetFavoriteImagesRoute = typeof getFavoriteImagesRoute;
 export type CreateFavoriteRoute = typeof createFavoriteRoute;
 export type DeleteFavoriteRoute = typeof deleteFavoriteRoute;
 export type UpdateNotesRoute = typeof updateNotesRoute;
+export type GetPhotographerDetailsRoute = typeof getPhotographerDetailsRoute;
+export type CreateBookingRoute = typeof createBookingRoute;
