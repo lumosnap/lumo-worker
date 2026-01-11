@@ -1,7 +1,8 @@
 import { albums, images, favorites } from "@/db/schema/albums";
+import { subscriptions, plans } from "@/db/schema/billing";
 import { profiles } from "@/db/schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, gt } from 'drizzle-orm';
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute } from "./album.routes";
 import { useBackBlaze } from "@/lib/backblaze";
@@ -615,12 +616,31 @@ export const generateUploadUrl: AppRouteHandler<GenerateUploadUrlRoute> = async 
       profile = { totalImages: 0 };
     }
 
-    // Check global max images threshold
-    if (profile.totalImages >= GLOBAL_MAX_IMAGES) {
+    // Verify Plan Limits
+    // Fetch user's active subscription and plan
+    const [subscription] = await db
+      .select({
+        status: subscriptions.status,
+        imageLimit: plans.imageLimit,
+      })
+      .from(subscriptions)
+      .leftJoin(plans, eq(subscriptions.planId, plans.id))
+      .where(and(
+        eq(subscriptions.userId, user.id),
+        eq(subscriptions.status, 'active'),
+        gt(subscriptions.currentPeriodEnd, new Date())
+      ));
+
+    // Default to 500 (Trial) if no active subscription found
+    // Ideally we should sync this default with the 'Trial' plan in DB, but hardcoding fallback is safe for now
+    const limit = subscription?.imageLimit ?? 500;
+
+    // Check plan specific image limit
+    if (profile.totalImages >= limit) {
       return c.json(
         {
           success: false,
-          message: `Maximum image limit of ${GLOBAL_MAX_IMAGES} reached. Cannot upload more images.`,
+          message: `Maximum image limit of ${limit} reached for your current plan. Please upgrade to upload more images.`,
         },
         HttpStatusCodes.FORBIDDEN
       );
@@ -864,7 +884,7 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
 
     // Filter out null results (images that weren't found)
     const validUpdates = updatedImages.filter(u => u !== null);
-    
+
     if (validUpdates.length === 0) {
       return c.json(
         {

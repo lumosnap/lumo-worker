@@ -1,0 +1,1 @@
+ALTER TABLE "albums" ALTER COLUMN "is_secondary_storage" SET NOT NULL;

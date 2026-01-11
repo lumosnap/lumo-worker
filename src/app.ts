@@ -7,6 +7,7 @@ import album from "@/routes/album/album.index";
 import publicRoutes from "@/routes/public/public.index";
 import profile from "@/routes/profile/profile.index";
 import billing from "@/routes/billing/billing.index";
+import plans from "@/routes/plans/index"; // Import user plans router
 import index from "@/routes/index.route";
 import admin from "@/routes/admin/admin.index";
 import { createAuth } from "@/lib/auth";
@@ -32,6 +33,7 @@ const routes = [
   profile,
   billing,
   admin,
+  plans, // Helper for user plans
 ] as const;
 
 routes.forEach((route) => {

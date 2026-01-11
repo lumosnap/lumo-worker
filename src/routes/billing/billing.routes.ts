@@ -10,7 +10,7 @@ const errorResponseSchema = z.object({
 
 const planSchema = z.object({
   id: z.number(),
-  name: z.enum(["free", "pro", "business"]),
+  name: z.string(), // Changed from enum to string
   displayName: z.string(),
   priceMonthly: z.string().nullable(), // DB stores as decimal string
   storageLimit: z.number().nullable(),
@@ -24,7 +24,7 @@ const subscriptionSchema = z.object({
   id: z.number(),
   userId: z.string().nullable(),
   planId: z.number().nullable(),
-  status: z.enum(["active", "cancelled", "past_due"]),
+  status: z.string(), // Changed from enum to string
   currentPeriodStart: z.string().datetime(),
   currentPeriodEnd: z.string().datetime(),
   stripeSubscriptionId: z.string().nullable(),

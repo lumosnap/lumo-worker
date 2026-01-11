@@ -19,9 +19,11 @@ export const requireAdmin = createMiddleware<AppBindings>(async (c, next) => {
     const adminRoles = ['superadmin', 'admin', 'staff']
     const userRoles = user.role?.split(',').map(r => r.trim()) || []
 
+    // Check if user has admin role OR is the super admin by email
     const hasAdminRole = userRoles.some(role => adminRoles.includes(role))
+    const isSuperAdminByEmail = user.email === c.env.SUPER_ADMIN_EMAIL
 
-    if (!hasAdminRole) {
+    if (!hasAdminRole && !isSuperAdminByEmail) {
         return c.json(
             { success: false, message: 'Admin access required' },
             HttpStatusCodes.FORBIDDEN

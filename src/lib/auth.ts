@@ -3,6 +3,10 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin, bearer } from "better-auth/plugins";
 import type { Environment } from "@/env";
 import { profiles } from "@/db/schema/profiles";
+import { subscriptions, plans } from "@/db/schema/billing";
+
+import { eq } from "drizzle-orm";
+import { user } from "@/db/schema/auth";
 
 export function createAuth(db: any, env: Environment) {
   return betterAuth({
@@ -13,6 +17,7 @@ export function createAuth(db: any, env: Environment) {
       enabled: true,
       requireEmailVerification: false,
     },
+    // ... socialProviders, secret, baseURL, etc ...
     socialProviders: {
       google: {
         clientId: env.GOOGLE_CLIENT_ID,
@@ -49,14 +54,49 @@ export function createAuth(db: any, env: Environment) {
     databaseHooks: {
       user: {
         create: {
-          after: async (user) => {
+          after: async (item) => {
             // Auto-create profile for new users
             await db.insert(profiles).values({
-              userId: user.id,
+              userId: item.id,
             }).onConflictDoNothing();
+
+            // Auto-assign Trial subscription
+            const [trialPlan] = await db.select().from(plans).where(eq(plans.name, 'trial'));
+            if (trialPlan) {
+              const now = new Date();
+              const expiresAt = new Date(now);
+              expiresAt.setFullYear(now.getFullYear() + 1); // 1 year trial
+
+              await db.insert(subscriptions).values({
+                userId: item.id,
+                planId: trialPlan.id,
+                status: 'active',
+                currentPeriodStart: now,
+                currentPeriodEnd: expiresAt,
+              }).onConflictDoNothing();
+            }
           },
         },
       },
+      session: {
+        create: {
+          before: async (session) => {
+            // Check if user is super admin
+            const [currentUser] = await db.select().from(user).where(eq(user.id, session.userId));
+
+            if (currentUser && currentUser.email === env.SUPER_ADMIN_EMAIL) {
+              const currentRoles = currentUser.role ? currentUser.role.split(',').map((r: string) => r.trim()) : [];
+
+              if (!currentRoles.includes('superadmin')) {
+                // Add superadmin role
+                const newRoles = [...currentRoles, 'superadmin'].filter(Boolean).join(',');
+                await db.update(user).set({ role: newRoles }).where(eq(user.id, session.userId));
+              }
+            }
+            return { data: session };
+          }
+        }
+      }
     },
   });
 }

@@ -1,6 +1,7 @@
 import { profiles, billingAddresses } from "@/db/schema/profiles";
+import { subscriptions, plans } from "@/db/schema/billing";
 import type { AppRouteHandler } from "@/lib/types";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gt } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 import type {
@@ -47,6 +48,29 @@ export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
       profile = newProfile;
     }
 
+    // Get user's subscription and plan limit
+    const now = new Date();
+    const [subscription] = await db
+      .select({
+        planName: plans.name,
+        planDisplayName: plans.displayName,
+        imageLimit: plans.imageLimit,
+        status: subscriptions.status,
+        currentPeriodEnd: subscriptions.currentPeriodEnd,
+      })
+      .from(subscriptions)
+      .leftJoin(plans, eq(subscriptions.planId, plans.id))
+      .where(and(
+        eq(subscriptions.userId, user.id),
+        eq(subscriptions.status, 'active'),
+        gt(subscriptions.currentPeriodEnd, now)
+      ));
+
+    // Default to Trial limits if no active subscription
+    const imageLimit = subscription?.imageLimit ?? 500;
+    const planName = subscription?.planDisplayName ?? 'Trial';
+    const planExpiry = subscription?.currentPeriodEnd ?? null;
+
     // Calculate profileCompleted based on businessName
     const profileCompleted = !!profile.businessName && profile.businessName.length > 0;
 
@@ -57,7 +81,10 @@ export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
         data: {
           ...profile,
           profileCompleted,
-          globalMaxImages: GLOBAL_MAX_IMAGES,
+          globalMaxImages: GLOBAL_MAX_IMAGES, // Keep for backwards compatibility
+          imageLimit, // User's actual plan-based limit
+          planName,
+          planExpiry,
         },
       },
       HttpStatusCodes.OK
