@@ -288,7 +288,6 @@ export const deleteBillingAddressRoute = createRoute({
   },
 });
 
-// GET booking URL
 export const getBookingUrlRoute = createRoute({
   tags: ["Profile"],
   method: "get",
@@ -317,6 +316,48 @@ export const getBookingUrlRoute = createRoute({
   },
 });
 
+const bookingSchema = z.object({
+  id: z.number(),
+  photographerId: z.string(),
+  eventType: z.string(),
+  name: z.string(),
+  phone: z.string(),
+  eventDate: z.string(), // date type in drizzle usually comes as string or Date object, but for json response string is safe
+  location: z.string(),
+  details: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+const bookingsResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.array(bookingSchema).optional(),
+});
+
+// GET bookings
+export const getBookingsRoute = createRoute({
+  tags: ["Profile"],
+  method: "get",
+  summary: "Get bookings",
+  description: "Retrieve all bookings for the current photographer",
+  path: "/profile/bookings",
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      bookingsResponseSchema,
+      "Bookings retrieved successfully",
+    ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      errorResponseSchema,
+      "Internal server error",
+    ),
+  },
+});
+
 export type GetProfileRoute = typeof getProfileRoute;
 export type UpdateProfileRoute = typeof updateProfileRoute;
 export type PatchProfileRoute = typeof patchProfileRoute;
@@ -325,3 +366,4 @@ export type CreateBillingAddressRoute = typeof createBillingAddressRoute;
 export type UpdateBillingAddressRoute = typeof updateBillingAddressRoute;
 export type DeleteBillingAddressRoute = typeof deleteBillingAddressRoute;
 export type GetBookingUrlRoute = typeof getBookingUrlRoute;
+export type GetBookingsRoute = typeof getBookingsRoute;

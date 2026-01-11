@@ -10,6 +10,7 @@ const router = createRouter()
   .openapi(routes.createBillingAddressRoute, handlers.createBillingAddress)
   .openapi(routes.updateBillingAddressRoute, handlers.updateBillingAddress)
   .openapi(routes.deleteBillingAddressRoute, handlers.deleteBillingAddress)
-  .openapi(routes.getBookingUrlRoute, handlers.getBookingUrl);
+  .openapi(routes.getBookingUrlRoute, handlers.getBookingUrl)
+  .openapi(routes.getBookingsRoute, handlers.getBookings);
 
 export default router;

@@ -1,4 +1,5 @@
 import { profiles, billingAddresses } from "@/db/schema/profiles";
+import { bookings } from "@/db/schema/bookings";
 import { subscriptions, plans } from "@/db/schema/billing";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, and, desc, gt } from "drizzle-orm";
@@ -11,7 +12,8 @@ import type {
   CreateBillingAddressRoute,
   UpdateBillingAddressRoute,
   DeleteBillingAddressRoute,
-  GetBookingUrlRoute
+  GetBookingUrlRoute,
+  GetBookingsRoute
 } from "./profile.routes";
 
 export const getProfile: AppRouteHandler<GetProfileRoute> = async (c) => {
@@ -551,6 +553,47 @@ export const getBookingUrl: AppRouteHandler<GetBookingUrlRoute> = async (c) => {
       {
         success: false,
         message: "Problem generating booking URL",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const getBookings: AppRouteHandler<GetBookingsRoute> = async (c) => {
+  try {
+    const user = c.get('user');
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          message: "Unauthorized",
+        },
+        HttpStatusCodes.UNAUTHORIZED
+      );
+    }
+
+    const db = c.get('db');
+
+    const userBookings = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.photographerId, user.id))
+      .orderBy(desc(bookings.createdAt));
+
+    return c.json(
+      {
+        success: true,
+        message: "Bookings retrieved successfully",
+        data: userBookings,
+      },
+      HttpStatusCodes.OK
+    );
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem retrieving bookings",
       },
       HttpStatusCodes.INTERNAL_SERVER_ERROR
     );
