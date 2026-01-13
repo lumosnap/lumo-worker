@@ -714,7 +714,7 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
           .insert(images)
           .values({
             albumId,
-            b2FileId: img.b2FileId,
+            sourceImageHash: img.sourceImageHash,
             b2FileName: img.key,
             originalFilename: img.filename,
             fileSize: img.fileSize,
@@ -863,7 +863,7 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
         const [updatedImage] = await db
           .update(images)
           .set({
-            b2FileId: img.b2FileId,
+            sourceImageHash: img.sourceImageHash,
             b2FileName: img.b2FileName,
             fileSize: img.fileSize,
             width: img.width,
@@ -996,7 +996,7 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
       return {
         id: image.id,
         albumId: image.albumId || albumId, // Ensure albumId is a string
-        b2FileId: image.b2FileId,
+        sourceImageHash: image.sourceImageHash,
         b2FileName: image.b2FileName,
         originalFilename: image.originalFilename,
         fileSize: image.fileSize,

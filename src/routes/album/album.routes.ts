@@ -53,7 +53,7 @@ const generateUploadUrlResponseSchema = z.object({
 const confirmUploadSchema = z.object({
   images: z.array(z.object({
     filename: z.string(),
-    b2FileId: z.string().nullable().optional(),
+    sourceImageHash: z.string().nullable().optional(),
     key: z.string(),
     fileSize: z.number(),
     width: z.number(),
@@ -77,7 +77,7 @@ const confirmUploadResponseSchema = z.object({
 const updateImagesSchema = z.object({
   images: z.array(z.object({
     imageId: z.number(),
-    b2FileId: z.string().nullable().optional(),
+    sourceImageHash: z.string().nullable().optional(),
     b2FileName: z.string(),
     fileSize: z.number(),
     width: z.number(),
@@ -100,7 +100,7 @@ const updateImagesResponseSchema = z.object({
 const imageSchema = z.object({
   id: z.number(),
   albumId: z.string().nullable(),
-  b2FileId: z.string().nullable(),
+  sourceImageHash: z.string().nullable(),
   b2FileName: z.string(),
   originalFilename: z.string(),
   fileSize: z.number(),

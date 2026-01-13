@@ -26,7 +26,7 @@ export const uploadStatusEnum = pgEnum('upload_status', ['pending', 'uploading',
 export const images = pgTable("images", {
   id: serial("id").primaryKey(),
   albumId: varchar("album_id", { length: 25 }).references(() => albums.id, { onDelete: "cascade" }),
-  b2FileId: varchar("b2_file_id", { length: 255 }),
+  sourceImageHash: varchar("source_image_hash", { length: 255 }),
   b2FileName: varchar("b2_file_name", { length: 500 }).notNull(),
   originalFilename: varchar("original_filename", { length: 255 }).notNull(),
   fileSize: bigint("file_size", { mode: "number" }).notNull(),
@@ -40,7 +40,7 @@ export const images = pgTable("images", {
 }, (t) => {
   return {
     albumIdIdx: index('images_album_id_idx').on(t.albumId),
-    b2FileIdIdx: index('images_b2_file_id_idx').on(t.b2FileId),
+    sourceImageHashIdx: index('images_source_image_hash_idx').on(t.sourceImageHash),
     uploadOrderIdx: index('images_upload_order_idx').on(t.albumId, t.uploadOrder),
   }
 });
