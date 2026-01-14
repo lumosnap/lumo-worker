@@ -397,6 +397,29 @@ export const confirmUploadRoute = createRoute({
       confirmUploadResponseSchema,
       "Upload metadata saved successfully",
     ),
+    207: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+        data: z.array(z.object({
+          id: z.number(),
+          originalFilename: z.string(),
+          b2FileName: z.string(),
+        })).optional(),
+        errors: z.array(z.object({
+          filename: z.string(),
+          error: z.string(),
+        })).optional(),
+      }),
+      "Partial success - some images saved, some failed",
+    ),
+    [HttpStatusCodes.BAD_REQUEST]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Invalid request - no images provided",
+    ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
       z.object({
         success: z.boolean(),
@@ -418,12 +441,23 @@ export const confirmUploadRoute = createRoute({
       }),
       "Album not found",
     ),
-    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+    [HttpStatusCodes.UNPROCESSABLE_ENTITY]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+        errors: z.array(z.object({
+          filename: z.string(),
+          error: z.string(),
+        })).optional(),
+      }),
+      "Failed to save any image metadata",
+    ),
+    [HttpStatusCodes.SERVICE_UNAVAILABLE]: jsonContent(
       z.object({
         success: z.boolean(),
         message: z.string(),
       }),
-      "Internal server error",
+      "Database temporarily unavailable",
     ),
   },
 })

@@ -669,81 +669,151 @@ export const generateUploadUrl: AppRouteHandler<GenerateUploadUrlRoute> = async 
 }
 
 export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
-  try {
-    const user = c.get('user');
-    if (!user) {
-      return c.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
-        HttpStatusCodes.UNAUTHORIZED
-      );
-    }
-
-    const db = c.get('db');
-    const { albumId } = c.req.valid("param");
-    const { images: uploadedImages } = c.req.valid("json");
-
-    // Check if album exists and user owns it
-    const [album] = await db.select().from(albums).where(eq(albums.id, albumId));
-    if (!album) {
-      return c.json(
-        {
-          success: false,
-          message: "Album not found",
-        },
-        HttpStatusCodes.NOT_FOUND
-      );
-    }
-
-    if (album.userId !== user.id) {
-      return c.json(
-        {
-          success: false,
-          message: "Forbidden - you don't own this album",
-        },
-        HttpStatusCodes.FORBIDDEN
-      );
-    }
-
-    // Save image metadata to database
-    const savedImages = await Promise.all(
-      uploadedImages.map(async (img) => {
-        const [savedImage] = await db
-          .insert(images)
-          .values({
-            albumId,
-            sourceImageHash: img.sourceImageHash,
-            b2FileName: img.key,
-            originalFilename: img.filename,
-            fileSize: img.fileSize,
-            width: img.width,
-            height: img.height,
-            uploadOrder: img.uploadOrder,
-            thumbnailB2FileId: img.thumbnailB2FileId,
-            thumbnailB2FileName: img.thumbnailKey,
-            uploadStatus: 'complete',
-          })
-          .returning({
-            id: images.id,
-            originalFilename: images.originalFilename,
-            b2FileName: images.b2FileName,
-          });
-        return savedImage;
-      })
+  const user = c.get('user');
+  if (!user) {
+    return c.json(
+      {
+        success: false,
+        message: "Unauthorized",
+      },
+      HttpStatusCodes.UNAUTHORIZED
     );
+  }
 
-    // Update album statistics - need to get fileSize from uploadedImages since we didn't return it
-    const totalSize = uploadedImages.reduce((sum, img) => sum + img.fileSize, 0);
+  const db = c.get('db');
+  const { albumId } = c.req.valid("param");
+  const { images: uploadedImages } = c.req.valid("json");
 
-    // Generate share token if not exists
-    let shareToken = album.shareLinkToken;
-    if (!shareToken) {
+  // Validate uploaded images array
+  if (!uploadedImages || uploadedImages.length === 0) {
+    return c.json(
+      {
+        success: false,
+        message: "No images provided for confirmation",
+      },
+      HttpStatusCodes.BAD_REQUEST
+    );
+  }
+
+  // Check if album exists and user owns it
+  let album;
+  try {
+    const [result] = await db.select().from(albums).where(eq(albums.id, albumId));
+    album = result;
+  } catch (dbError: any) {
+    console.error("Database error fetching album:", dbError);
+    return c.json(
+      {
+        success: false,
+        message: "Unable to verify album. Please try again.",
+      },
+      HttpStatusCodes.SERVICE_UNAVAILABLE
+    );
+  }
+
+  if (!album) {
+    return c.json(
+      {
+        success: false,
+        message: "Album not found",
+      },
+      HttpStatusCodes.NOT_FOUND
+    );
+  }
+
+  if (album.userId !== user.id) {
+    return c.json(
+      {
+        success: false,
+        message: "Forbidden - you don't own this album",
+      },
+      HttpStatusCodes.FORBIDDEN
+    );
+  }
+
+  // Save image metadata to database - handle individual failures gracefully
+  const savedImages: { id: number; originalFilename: string; b2FileName: string }[] = [];
+  const failedImages: { filename: string; error: string }[] = [];
+
+  for (const img of uploadedImages) {
+    try {
+      // Validate required fields
+      if (!img.key || !img.filename) {
+        failedImages.push({
+          filename: img.filename || 'unknown',
+          error: 'Missing required field: key or filename',
+        });
+        continue;
+      }
+
+      // Validate fileSize is a valid number
+      const fileSize = typeof img.fileSize === 'number' && !isNaN(img.fileSize) ? img.fileSize : 0;
+
+      const [savedImage] = await db
+        .insert(images)
+        .values({
+          albumId,
+          sourceImageHash: img.sourceImageHash ?? null,
+          b2FileName: img.key,
+          originalFilename: img.filename,
+          fileSize,
+          width: img.width ?? 0,
+          height: img.height ?? 0,
+          uploadOrder: img.uploadOrder ?? 0,
+          thumbnailB2FileId: img.thumbnailB2FileId ?? null,
+          thumbnailB2FileName: img.thumbnailKey ?? null,
+          uploadStatus: 'complete',
+        })
+        .returning({
+          id: images.id,
+          originalFilename: images.originalFilename,
+          b2FileName: images.b2FileName,
+        });
+      savedImages.push(savedImage);
+    } catch (insertError: any) {
+      console.error(`Failed to insert image ${img.filename}:`, insertError);
+      failedImages.push({
+        filename: img.filename || 'unknown',
+        error: insertError?.message || 'Database insert failed',
+      });
+    }
+  }
+
+  // If all images failed, return an error
+  if (savedImages.length === 0) {
+    return c.json(
+      {
+        success: false,
+        message: "Failed to save any image metadata",
+        errors: failedImages,
+      },
+      HttpStatusCodes.UNPROCESSABLE_ENTITY
+    );
+  }
+
+  // Calculate total size only from successfully saved images
+  const totalSize = uploadedImages
+    .filter(img => savedImages.some(saved => saved.b2FileName === img.key))
+    .reduce((sum, img) => {
+      const size = typeof img.fileSize === 'number' && !isNaN(img.fileSize) ? img.fileSize : 0;
+      return sum + size;
+    }, 0);
+
+  // Generate share token if not exists
+  let shareToken = album.shareLinkToken;
+  if (!shareToken) {
+    try {
       const { createId } = await import('@paralleldrive/cuid2');
       shareToken = createId();
+    } catch (importError: any) {
+      console.error("Failed to generate share token:", importError);
+      // Continue without share token - not critical
+      shareToken = null;
     }
+  }
 
+  // Update album statistics
+  try {
     await db
       .update(albums)
       .set({
@@ -753,34 +823,64 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
         updatedAt: new Date(),
       })
       .where(eq(albums.id, albumId));
+  } catch (updateError: any) {
+    console.error("Failed to update album statistics:", updateError);
+    // Images are saved, but stats update failed - non-critical, continue
+  }
 
-    // Update profile's totalImages
-    await db
-      .update(profiles)
-      .set({
-        totalImages: sql`${profiles.totalImages} + ${savedImages.length}`,
-        updatedAt: new Date(),
-      })
+  // Update profile's totalImages - ensure profile exists first
+  try {
+    const [existingProfile] = await db
+      .select({ id: profiles.id })
+      .from(profiles)
       .where(eq(profiles.userId, user.id));
 
+    if (existingProfile) {
+      await db
+        .update(profiles)
+        .set({
+          totalImages: sql`${profiles.totalImages} + ${savedImages.length}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(profiles.userId, user.id));
+    } else {
+      // Create profile if it doesn't exist
+      await db
+        .insert(profiles)
+        .values({
+          userId: user.id,
+          businessName: null,
+          phone: null,
+          storageUsed: 0,
+          totalImages: savedImages.length,
+        });
+    }
+  } catch (profileError: any) {
+    console.error("Failed to update profile:", profileError);
+    // Profile update is non-critical, continue
+  }
+
+  // Determine response based on partial success
+  if (failedImages.length > 0) {
     return c.json(
       {
         success: true,
-        message: "Upload metadata saved successfully",
+        message: `Partially saved: ${savedImages.length} succeeded, ${failedImages.length} failed`,
         data: savedImages,
+        errors: failedImages,
       },
-      HttpStatusCodes.OK
-    );
-  } catch (error: any) {
-    console.log(error);
-    return c.json(
-      {
-        success: false,
-        message: "Problem saving upload metadata",
-      },
-      HttpStatusCodes.INTERNAL_SERVER_ERROR
+      207 as any // Multi-Status for partial success
     );
   }
+
+  return c.json(
+    {
+      success: true,
+      message: "Upload metadata saved successfully",
+      data: savedImages,
+    },
+    HttpStatusCodes.OK
+  );
 }
 
 export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
