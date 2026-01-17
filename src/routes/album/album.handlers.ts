@@ -145,8 +145,8 @@ export const listAlbums: AppRouteHandler<ListAlbumsRoute> = async (c) => {
 
           // Add preview link if we found an image
           if (firstImage) {
-            // Use thumbnail if available (and has file ID), otherwise use main image
-            const imageKey = firstImage.thumbnailB2FileId && firstImage.thumbnailB2FileName ? firstImage.thumbnailB2FileName : firstImage.b2FileName;
+            // Use thumbnail if available, otherwise use main image
+            const imageKey = firstImage.thumbnailB2FileName ? firstImage.thumbnailB2FileName : firstImage.b2FileName;
             return {
               ...album,
               preview_link: imageKey ? getPublicUrl(imageKey, album.isSecondaryStorage!) : null,
@@ -433,7 +433,7 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
           height: img.height,
           createdAt: img.createdAt,
           url: getPublicUrl(img.b2FileName, album.isSecondaryStorage!),
-          thumbnailUrl: img.thumbnailB2FileId && img.thumbnailB2FileName ? getPublicUrl(img.thumbnailB2FileName, album.isSecondaryStorage!) : null,
+          thumbnailUrl: img.thumbnailB2FileName ? getPublicUrl(img.thumbnailB2FileName, album.isSecondaryStorage!) : null,
           favoriteCount: imageFavorites.length,
           notesCount,
           comments,
@@ -1085,7 +1085,7 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
     let previewLink = null;
     if (albumImages.length > 0) {
       const firstImage = albumImages[0];
-      const imageKey = firstImage.thumbnailB2FileId && firstImage.thumbnailB2FileName ? firstImage.thumbnailB2FileName : firstImage.b2FileName;
+      const imageKey = firstImage.thumbnailB2FileName ? firstImage.thumbnailB2FileName : firstImage.b2FileName;
       previewLink = imageKey ? getPublicUrl(imageKey, album.isSecondaryStorage!) : null;
     }
 
@@ -1108,7 +1108,7 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
         thumbnailB2FileName: image.thumbnailB2FileName,
         createdAt: image.createdAt,
         url: imageKey ? getPublicUrl(imageKey, album.isSecondaryStorage!) : null,
-        thumbnailUrl: image.thumbnailB2FileId && thumbnailKey ? getPublicUrl(thumbnailKey, album.isSecondaryStorage!) : null,
+        thumbnailUrl: thumbnailKey ? getPublicUrl(thumbnailKey, album.isSecondaryStorage!) : null,
       };
     });
 
