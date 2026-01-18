@@ -4,7 +4,7 @@ import { user } from "@/db/schema/auth";
 import { bookings } from "@/db/schema/bookings";
 import type { AppRouteHandler } from "@/lib/types";
 import { useImageUrlCache } from "@/lib/image-cache";
-import { eq, and, desc, count, isNotNull, ne, sql } from "drizzle-orm";
+import { eq, and, desc, asc, count, isNotNull, ne, sql } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type {
   GetAlbumByTokenRoute,
@@ -115,7 +115,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
         })
         .from(images)
         .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')))
-        .orderBy(desc(images.uploadOrder));
+        .orderBy(asc(images.uploadOrder));
 
       // Filter to only favorited images (images that have at least one favorite from anyone)
       const filteredImages = allImages.filter((img) => favoritedImageIds.has(img.id));
@@ -147,7 +147,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
         })
         .from(images)
         .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')))
-        .orderBy(desc(images.uploadOrder))
+        .orderBy(asc(images.uploadOrder))
         .limit(limit)
         .offset(offset);
     }
