@@ -53,9 +53,6 @@ importers:
       pino:
         specifier: ^10.1.0
         version: 10.1.0
-      postgres:
-        specifier: ^3.4.7
-        version: 3.4.7
       stoker:
         specifier: ^2.0.1
         version: 2.0.1(@asteasolutions/zod-to-openapi@8.1.0(zod@4.1.12))(@hono/zod-openapi@1.1.4(hono@4.10.4)(zod@4.1.12))(hono@4.10.4)(openapi3-ts@4.5.0)
@@ -6131,7 +6128,8 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  postgres@3.4.7: {}
+  postgres@3.4.7:
+    optional: true
 
   prelude-ls@1.2.1: {}
 
