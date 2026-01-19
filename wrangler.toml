@@ -18,3 +18,9 @@ invocation_logs = true
 enabled = true
 persist = true
 head_sampling_rate = 1
+
+[[d1_databases]]
+binding = "lumo_db"
+database_name = "lumo-db"
+database_id = "93a3c93a-6dca-4a16-aa61-bb36e1a44e6d"
+migrations_dir = "src/db/d1-migrations"

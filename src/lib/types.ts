@@ -1,12 +1,11 @@
 import type { OpenAPIHono, RouteConfig, RouteHandler } from "@hono/zod-openapi";
 import type { PinoLogger } from "hono-pino";
 import type { InferSelectModel } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import type { Sql } from "postgres";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
 
 import type { Environment } from "@/env";
-import type { user, session } from "@/db/schema/auth";
-import type * as schema from "@/db/schema";
+import type { user, session } from "@/db/d1-schema/auth";
+import type * as schema from "@/db/d1-schema";
 
 // Derive base types from Drizzle schema (compatible with Better Auth)
 type UserBase = InferSelectModel<typeof user>;
@@ -26,8 +25,7 @@ export interface AppBindings {
     logger: PinoLogger;
     user: User | null;
     session: Session | null;
-    db: PostgresJsDatabase<typeof schema>;
-    dbClient: Sql;
+    db: DrizzleD1Database<typeof schema>;
   };
 }
 

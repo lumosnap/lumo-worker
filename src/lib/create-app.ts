@@ -19,18 +19,19 @@ export function createRouter() {
 export default function createApp() {
   const app = createRouter();
 
-  // Parse environment variables
+  // Parse environment variables (preserve D1 binding from Cloudflare runtime)
   app.use((c, next) => {
     // eslint-disable-next-line node/no-process-env
-    c.env = parseEnv(Object.assign(c.env || {}, process.env));
+    const parsedEnv = parseEnv(Object.assign(c.env || {}, process.env));
+    // Preserve D1 binding from Cloudflare runtime
+    c.env = { ...parsedEnv, lumo_db: (c.env as any).lumo_db } as typeof c.env;
     return next();
   });
 
   // Initialize database connection once per request
   app.use(async (c, next) => {
-    const { db, client } = createDb(c.env);
+    const { db } = createDb(c.env);
     c.set('db', db);
-    c.set('dbClient', client);
     return next();
   });
 

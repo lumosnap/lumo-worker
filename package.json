@@ -14,6 +14,10 @@
     "db:migrate:local": "npx drizzle-kit migrate --config=drizzle-local.config.ts",
     "db:seed:local": "tsx scripts/seed-db.ts",
     "db:seed:dev": "tsx scripts/seed-db.ts",
+    "db:generate:d1": "npx drizzle-kit generate --config=drizzle-d1.config.ts",
+    "db:migrate:d1:local": "wrangler d1 migrations apply lumo-db --local",
+    "db:migrate:d1:remote": "wrangler d1 migrations apply lumo-db --remote",
+    "wrangler:types": "wrangler types",
     "dev:setup": "chmod +x scripts/dev-setup.sh && ./scripts/dev-setup.sh",
     "test:api": "chmod +x scripts/test-api.sh && ./scripts/test-api.sh",
     "typecheck": "tsc --noEmit",
@@ -37,7 +41,6 @@
     "hono-pino": "^0.10.3",
     "nanoid": "^5.1.6",
     "pino": "^10.1.0",
-    "postgres": "^3.4.7",
     "stoker": "^2.0.1",
     "uuid": "^13.0.0",
     "zod": "^4.1.12"

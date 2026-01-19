@@ -2,8 +2,8 @@ import { eq, count, sql, gte } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type { AppRouteHandler } from "@/lib/types";
 import type * as routes from "./admin.routes";
-import { user, session } from "@/db/schema/auth";
-import { albums, images } from "@/db/schema/albums";
+import { user, session } from "@/db/d1-schema/auth";
+import { albums, images } from "@/db/d1-schema/albums";
 
 type GetStatsRoute = typeof routes.getStatsRoute;
 type ListUsersRoute = typeof routes.listUsersRoute;

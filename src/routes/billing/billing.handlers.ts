@@ -1,4 +1,4 @@
-import { plans, subscriptions } from "@/db/schema/billing";
+import { plans, subscriptions } from "@/db/d1-schema/billing";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, and, desc } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
@@ -20,11 +20,16 @@ export const getPlans: AppRouteHandler<GetPlansRoute> = async (c) => {
       .where(eq(plans.isActive, true))
       .orderBy(plans.priceMonthly);
 
+    const formattedPlans = availablePlans.map(plan => ({
+      ...plan,
+      priceMonthly: plan.priceMonthly ? String(plan.priceMonthly) : "0",
+    }));
+
     return c.json(
       {
         success: true,
         message: "Plans retrieved successfully",
-        data: availablePlans,
+        data: formattedPlans,
       },
       HttpStatusCodes.OK
     );
@@ -96,7 +101,13 @@ export const getSubscription: AppRouteHandler<GetSubscriptionRoute> = async (c) 
       {
         success: true,
         message: "Subscription retrieved successfully",
-        data: subscriptionWithPlan,
+        data: {
+          ...subscriptionWithPlan,
+          plan: subscriptionWithPlan.plan ? {
+            ...subscriptionWithPlan.plan,
+            priceMonthly: subscriptionWithPlan.plan.priceMonthly ? String(subscriptionWithPlan.plan.priceMonthly) : "0",
+          } : null
+        },
       },
       HttpStatusCodes.OK
     );
@@ -209,7 +220,13 @@ export const createSubscription: AppRouteHandler<CreateSubscriptionRoute> = asyn
       {
         success: true,
         message: "Subscription created successfully",
-        data: subscriptionWithPlan,
+        data: {
+          ...subscriptionWithPlan,
+          plan: subscriptionWithPlan.plan ? {
+            ...subscriptionWithPlan.plan,
+            priceMonthly: subscriptionWithPlan.plan.priceMonthly ? String(subscriptionWithPlan.plan.priceMonthly) : "0",
+          } : null
+        },
       },
       HttpStatusCodes.CREATED
     );
@@ -316,7 +333,13 @@ export const updateSubscription: AppRouteHandler<UpdateSubscriptionRoute> = asyn
       {
         success: true,
         message: "Subscription updated successfully",
-        data: subscriptionWithPlan,
+        data: {
+          ...subscriptionWithPlan,
+          plan: subscriptionWithPlan.plan ? {
+            ...subscriptionWithPlan.plan,
+            priceMonthly: subscriptionWithPlan.plan.priceMonthly ? String(subscriptionWithPlan.plan.priceMonthly) : "0",
+          } : null
+        },
       },
       HttpStatusCodes.OK
     );

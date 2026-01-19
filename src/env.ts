@@ -35,7 +35,11 @@ const EnvSchema = z.object({
   SUPER_ADMIN_EMAIL: z.string(),
 });
 
-export type Environment = z.infer<typeof EnvSchema>;
+// Environment type combines validated env vars with D1 binding
+// D1Database is provided by Cloudflare Workers runtime, not via env vars
+export type Environment = z.infer<typeof EnvSchema> & {
+  lumo_db: D1Database;
+};
 
 export function parseEnv(data: any) {
   const { data: env, error } = EnvSchema.safeParse(data);

@@ -1,5 +1,5 @@
 import { AppRouteHandler } from "@/lib/types";
-import { plans, planRequests } from "@/db/schema/billing";
+import { plans, planRequests } from "@/db/d1-schema/billing";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { eq, and } from "drizzle-orm";
 import type { ListPublicPlansRoute, RequestUpgradeRoute } from "./plans.routes";

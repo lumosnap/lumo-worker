@@ -1,6 +1,6 @@
-import { profiles, billingAddresses } from "@/db/schema/profiles";
-import { bookings } from "@/db/schema/bookings";
-import { subscriptions, plans } from "@/db/schema/billing";
+import { profiles, billingAddresses } from "@/db/d1-schema/profiles";
+import { bookings } from "@/db/d1-schema/bookings";
+import { subscriptions, plans } from "@/db/d1-schema/billing";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, and, desc, gt } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";

@@ -1,12 +1,9 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { drizzle } from "drizzle-orm/d1";
 
-import type { Environment } from "@/env";
+import * as schema from "./d1-schema";
 
-import * as schema from "./schema";
-
-export function createDb(env: Environment) {
-  const client = postgres(env.DATABASE_URL);
-  const db = drizzle(client, { schema });
-  return { db, client };
+// D1Database type is globally available from @cloudflare/workers-types
+export function createDb(env: { lumo_db: D1Database }) {
+  const db = drizzle(env.lumo_db, { schema });
+  return { db };
 }

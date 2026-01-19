@@ -1,6 +1,6 @@
-import { albums, images, favorites } from "@/db/schema/albums";
-import { subscriptions, plans } from "@/db/schema/billing";
-import { profiles } from "@/db/schema/profiles";
+import { albums, images, favorites } from "@/db/d1-schema/albums";
+import { subscriptions, plans } from "@/db/d1-schema/billing";
+import { profiles } from "@/db/d1-schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, desc, and, sql, gt } from 'drizzle-orm';
 import * as HttpStatusCodes from "stoker/http-status-codes";
@@ -277,7 +277,7 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
       await db
         .update(profiles)
         .set({
-          totalImages: sql`GREATEST(0, ${profiles.totalImages} - ${albumImages.length})`,
+          totalImages: sql`MAX(0, ${profiles.totalImages} - ${albumImages.length})`,
           updatedAt: new Date(),
         })
         .where(eq(profiles.userId, user.id));
@@ -1232,7 +1232,7 @@ export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
     await db
       .update(profiles)
       .set({
-        totalImages: sql`GREATEST(0, ${profiles.totalImages} - 1)`,
+        totalImages: sql`MAX(0, ${profiles.totalImages} - 1)`,
         updatedAt: new Date(),
       })
       .where(eq(profiles.userId, user.id));
@@ -1353,7 +1353,7 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
     await db
       .update(profiles)
       .set({
-        totalImages: sql`GREATEST(0, ${profiles.totalImages} - ${deletedCount})`,
+        totalImages: sql`MAX(0, ${profiles.totalImages} - ${deletedCount})`,
         updatedAt: new Date(),
       })
       .where(eq(profiles.userId, user.id));

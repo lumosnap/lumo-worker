@@ -1,7 +1,7 @@
 import { AppRouteHandler } from "@/lib/types";
-import { plans, planRequests, subscriptions } from "@/db/schema/billing";
-import { user as userTable } from "@/db/schema/auth";
-import { profiles } from "@/db/schema/profiles";
+import { plans, planRequests, subscriptions } from "@/db/d1-schema/billing";
+import { user as userTable } from "@/db/d1-schema/auth";
+import { profiles } from "@/db/d1-schema/profiles";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { eq, desc, and } from "drizzle-orm";
 import type {
@@ -35,7 +35,7 @@ export const createPlanHandler: AppRouteHandler<CreatePlanRoute> = async (c) => 
         name: body.name,
         displayName: body.displayName,
         imageLimit: body.imageLimit,
-        priceMonthly: body.priceMonthly ? String(body.priceMonthly) : "0",
+        priceMonthly: body.priceMonthly ?? 0,
         description: body.description,
         isActive: body.isActive ?? true,
     }).returning();
@@ -65,7 +65,7 @@ export const updatePlanHandler: AppRouteHandler<UpdatePlanRoute> = async (c) => 
     const updateData: Record<string, unknown> = {};
     if (body.displayName !== undefined) updateData.displayName = body.displayName;
     if (body.imageLimit !== undefined) updateData.imageLimit = body.imageLimit;
-    if (body.priceMonthly !== undefined) updateData.priceMonthly = String(body.priceMonthly);
+    if (body.priceMonthly !== undefined) updateData.priceMonthly = body.priceMonthly;
     if (body.description !== undefined) updateData.description = body.description;
     if (body.isActive !== undefined) updateData.isActive = body.isActive;
 
@@ -114,7 +114,7 @@ export const listUpgradeRequestsHandler: AppRouteHandler<ListUpgradeRequestsRout
         id: r.id,
         userId: r.userId,
         planId: r.planId,
-        status: r.status,
+        status: r.status as "pending" | "approved" | "rejected",
         durationMonths: r.durationMonths,
         createdAt: r.createdAt!,
         user: {

@@ -1,7 +1,7 @@
-import { albums, images, favorites } from "@/db/schema/albums";
-import { profiles } from "@/db/schema/profiles";
-import { user } from "@/db/schema/auth";
-import { bookings } from "@/db/schema/bookings";
+import { albums, images, favorites } from "@/db/d1-schema/albums";
+import { profiles } from "@/db/d1-schema/profiles";
+import { user } from "@/db/d1-schema/auth";
+import { bookings } from "@/db/d1-schema/bookings";
 import type { AppRouteHandler } from "@/lib/types";
 import { useImageUrlCache } from "@/lib/image-cache";
 import { eq, and, desc, asc, count, isNotNull, ne, sql } from "drizzle-orm";
@@ -324,7 +324,7 @@ export const getFavoriteImages: AppRouteHandler<GetFavoriteImagesRoute> = async 
       .where(
         and(
           eq(favorites.albumId, album.id),
-          clientFavorites[0].imageId !== null ? eq(favorites.imageId, clientFavorites[0].imageId!) : sql`TRUE`
+          clientFavorites[0].imageId !== null ? eq(favorites.imageId, clientFavorites[0].imageId!) : sql`1`
         )
       );
 
