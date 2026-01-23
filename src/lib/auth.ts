@@ -2,16 +2,16 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin, bearer } from "better-auth/plugins";
 import type { Environment } from "@/env";
-import { profiles } from "@/db/schema/profiles";
-import { subscriptions, plans } from "@/db/schema/billing";
+import { profiles } from "@/db/d1-schema/profiles";
+import { subscriptions, plans } from "@/db/d1-schema/billing";
 
 import { eq } from "drizzle-orm";
-import { user } from "@/db/schema/auth";
+import { user } from "@/db/d1-schema/auth";
 
 export function createAuth(db: any, env: Environment) {
   return betterAuth({
     database: drizzleAdapter(db, {
-      provider: "pg"
+      provider: "sqlite"
     }),
     emailAndPassword: {
       enabled: true,
