@@ -42,7 +42,8 @@ export function createAuth(db: any, env: Environment) {
     },
     advanced: {
       defaultCookieAttributes: {
-        sameSite: "lax",
+        sameSite: "none",
+        secure: true,
       },
     },
     plugins: [
