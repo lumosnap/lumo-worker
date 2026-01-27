@@ -136,60 +136,70 @@ export const approveUpgradeRequestHandler: AppRouteHandler<ApproveUpgradeRequest
     const requestId = c.req.valid("param").id;
     const body = c.req.valid("json");
 
-    return await db.transaction(async (tx) => {
-        const [request] = await tx.select().from(planRequests).where(eq(planRequests.id, requestId));
+    // 1. Initial Reads (outside of transaction/batch)
+    const [request] = await db.select().from(planRequests).where(eq(planRequests.id, requestId));
 
-        if (!request) {
-            return c.json({ success: false, message: "Request not found" }, HttpStatusCodes.NOT_FOUND);
-        }
+    if (!request) {
+        return c.json({ success: false, message: "Request not found" }, HttpStatusCodes.NOT_FOUND);
+    }
 
-        const durationMonths = body.durationMonths || 12; // Default to 12 if not provided
-        const now = new Date();
+    const durationMonths = body.durationMonths || 12; // Default to 12 if not provided
+    const now = new Date();
 
-        // 1. Check/Create Subscription with correct renewal logic
-        const [existingSub] = await tx.select().from(subscriptions).where(eq(subscriptions.userId, request.userId));
+    const [existingSub] = await db.select().from(subscriptions).where(eq(subscriptions.userId, request.userId));
 
-        let currentPeriodStart = now;
-        let currentPeriodEnd = new Date(now);
+    // 2. Logic Calculation
+    let currentPeriodStart = now;
+    let currentPeriodEnd = new Date(now);
 
-        if (existingSub && existingSub.currentPeriodEnd > now) {
-            // If active and not expired, extend from existing end date
-            currentPeriodStart = existingSub.currentPeriodEnd;
-            currentPeriodEnd = new Date(existingSub.currentPeriodEnd);
-        }
+    if (existingSub && existingSub.currentPeriodEnd > now) {
+        // If active and not expired, extend from existing end date
+        currentPeriodStart = existingSub.currentPeriodEnd;
+        currentPeriodEnd = new Date(existingSub.currentPeriodEnd);
+    }
 
-        // Add duration
-        currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + durationMonths);
+    // Add duration
+    currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + durationMonths);
 
-        if (existingSub) {
-            await tx.update(subscriptions).set({
+    // 3. Construct Queries for Batch
+    const batchOps = [];
+
+    if (existingSub) {
+        batchOps.push(
+            db.update(subscriptions).set({
                 planId: request.planId,
                 status: 'active',
-                currentPeriodStart: currentPeriodStart, // Might stay same or update if expired
+                currentPeriodStart: currentPeriodStart,
                 currentPeriodEnd: currentPeriodEnd,
                 updatedAt: now,
-            }).where(eq(subscriptions.id, existingSub.id));
-        } else {
-            await tx.insert(subscriptions).values({
+            }).where(eq(subscriptions.id, existingSub.id))
+        );
+    } else {
+        batchOps.push(
+            db.insert(subscriptions).values({
                 userId: request.userId,
                 planId: request.planId,
                 status: 'active',
                 currentPeriodStart: now,
                 currentPeriodEnd: currentPeriodEnd,
-            });
-        }
+            })
+        );
+    }
 
-        // 2. Update Request Status
-        await tx.update(planRequests).set({
+    batchOps.push(
+        db.update(planRequests).set({
             status: 'approved',
             adminNotes: body.adminNotes,
             reviewedBy: adminUser.id,
             reviewedAt: now,
             updatedAt: now,
-        }).where(eq(planRequests.id, requestId));
+        }).where(eq(planRequests.id, requestId))
+    );
 
-        return c.json({ success: true, message: "Request approved and subscription updated" }, HttpStatusCodes.OK);
-    });
+    // 4. Execute Batch
+    await db.batch(batchOps as [any, any]);
+
+    return c.json({ success: true, message: "Request approved and subscription updated" }, HttpStatusCodes.OK);
 };
 
 export const rejectUpgradeRequestHandler: AppRouteHandler<RejectUpgradeRequestRoute> = async (c) => {
