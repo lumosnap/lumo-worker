@@ -1,5 +1,12 @@
+/**
+ * This seed script was using Postgres but the project has moved away from it.
+ * Disabling to prevent build errors.
+ * TODO: Implement D1 seeding if needed.
+ */
+
+/*
 import { config } from "dotenv";
-import postgres from "postgres";
+import postgres from "postgres"; // Module not found
 import { drizzle } from "drizzle-orm/postgres-js";
 import { plans } from "../src/db/schema/billing";
 import { eq } from "drizzle-orm";
@@ -44,3 +51,5 @@ seed().catch((err) => {
     console.error("❌ Seeding failed:", err);
     process.exit(1);
 });
+*/
+console.log("Seed script disabled (Postgres dependencies removed).");

@@ -13,7 +13,8 @@ import type {
   DeleteFavoriteRoute,
   UpdateNotesRoute,
   GetPhotographerDetailsRoute,
-  CreateBookingRoute
+  CreateBookingRoute,
+  BatchFavoritesRoute
 } from "./public.routes";
 
 export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) => {
@@ -638,6 +639,144 @@ export const updateNotes: AppRouteHandler<UpdateNotesRoute> = async (c) => {
       {
         success: false,
         message: "Problem updating notes",
+      },
+      HttpStatusCodes.INTERNAL_SERVER_ERROR
+    );
+  }
+};
+
+export const batchFavorites: AppRouteHandler<BatchFavoritesRoute> = async (c) => {
+  try {
+    const db = c.get('db');
+    const { token } = c.req.valid("param");
+    const { clientName, changes } = c.req.valid("json");
+
+    // Verify album exists
+    const [album] = await db
+      .select({ id: albums.id })
+      .from(albums)
+      .where(eq(albums.shareLinkToken, token));
+
+    if (!album) {
+      return c.json(
+        {
+          success: false,
+          message: "Album not found",
+        },
+        HttpStatusCodes.NOT_FOUND
+      );
+    }
+
+    const results: Array<{
+      imageId: number;
+      success: boolean;
+      message?: string;
+    }> = [];
+
+    // Process changes sequentially to avoid race conditions and simplify logic
+    // Using a transaction would be ideal but D1 transactions have limitations
+    for (const change of changes) {
+      try {
+        // Verify image exists in this album
+        const [image] = await db
+          .select({ id: images.id })
+          .from(images)
+          .where(and(eq(images.id, change.imageId), eq(images.albumId, album.id)));
+
+        if (!image) {
+          results.push({
+            imageId: change.imageId,
+            success: false,
+            message: "Image not found in this album",
+          });
+          continue;
+        }
+
+        if (change.action === 'unfavorite') {
+          // Delete favorite
+          await db
+            .delete(favorites)
+            .where(
+              and(
+                eq(favorites.albumId, album.id),
+                eq(favorites.imageId, change.imageId),
+                eq(favorites.clientName, clientName)
+              )
+            );
+
+          results.push({
+            imageId: change.imageId,
+            success: true,
+          });
+
+        } else if (change.action === 'favorite' || change.action === 'comment') {
+          // Check if favorite already exists
+          const [existingFavorite] = await db
+            .select()
+            .from(favorites)
+            .where(
+              and(
+                eq(favorites.albumId, album.id),
+                eq(favorites.imageId, change.imageId),
+                eq(favorites.clientName, clientName)
+              )
+            );
+
+          if (existingFavorite) {
+            // Update notes if provided or if it's a comment action
+            if (change.notes !== undefined) {
+              await db
+                .update(favorites)
+                .set({ notes: change.notes })
+                .where(eq(favorites.id, existingFavorite.id));
+            }
+            results.push({
+              imageId: change.imageId,
+              success: true,
+              message: "Updated existing favorite",
+            });
+          } else {
+            // Create new favorite
+            await db
+              .insert(favorites)
+              .values({
+                albumId: album.id,
+                imageId: change.imageId,
+                clientName,
+                notes: change.notes || null,
+              });
+            results.push({
+              imageId: change.imageId,
+              success: true,
+              message: "Created new favorite",
+            });
+          }
+        }
+      } catch (err) {
+        console.error(`Error processing batch item for image ${change.imageId}:`, err);
+        results.push({
+          imageId: change.imageId,
+          success: false,
+          message: "Internal error processing item",
+        });
+      }
+    }
+
+    return c.json(
+      {
+        success: true,
+        message: "Batch operations completed",
+        results,
+      },
+      HttpStatusCodes.OK
+    );
+
+  } catch (error: any) {
+    console.log(error);
+    return c.json(
+      {
+        success: false,
+        message: "Problem processing batch favorites",
       },
       HttpStatusCodes.INTERNAL_SERVER_ERROR
     );

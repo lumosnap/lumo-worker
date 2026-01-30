@@ -304,6 +304,63 @@ export const updateNotesRoute = createRoute({
   },
 });
 
+// PATCH batch favorites
+const batchFavoritesSchema = z.object({
+  clientName: z.string().min(1).max(255),
+  changes: z.array(z.object({
+    imageId: z.number(),
+    action: z.enum(['favorite', 'unfavorite', 'comment']),
+    notes: z.string().optional(),
+  })),
+});
+
+const batchFavoritesResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  results: z.array(z.object({
+    imageId: z.number(),
+    success: z.boolean(),
+    message: z.string().optional(),
+  })),
+});
+
+export const batchFavoritesRoute = createRoute({
+  tags: ["Public"],
+  method: "patch",
+  summary: "Batch favorite operations",
+  description: "Perform multiple favorite/unfavorite/comment operations at once",
+  path: "/share/:token/favorites/batch",
+  request: {
+    params: z.object({
+      token: z.string(),
+    }),
+    body: jsonContent(
+      batchFavoritesSchema,
+      "Batch operations",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      batchFavoritesResponseSchema,
+      "Batch operations completed",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Album not found",
+    ),
+    [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
+      z.object({
+        success: z.boolean(),
+        message: z.string(),
+      }),
+      "Internal server error",
+    ),
+  },
+});
+
 // Photographer details schema
 const photographerDetailsSchema = z.object({
   id: z.string(),
@@ -430,3 +487,4 @@ export type DeleteFavoriteRoute = typeof deleteFavoriteRoute;
 export type UpdateNotesRoute = typeof updateNotesRoute;
 export type GetPhotographerDetailsRoute = typeof getPhotographerDetailsRoute;
 export type CreateBookingRoute = typeof createBookingRoute;
+export type BatchFavoritesRoute = typeof batchFavoritesRoute;

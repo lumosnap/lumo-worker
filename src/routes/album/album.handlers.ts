@@ -1103,7 +1103,7 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
         width: image.width,
         height: image.height,
         uploadOrder: image.uploadOrder,
-        uploadStatus: image.uploadStatus || 'complete', // Ensure uploadStatus is not null
+        uploadStatus: (image.uploadStatus as "pending" | "uploading" | "complete" | "failed" | null) || 'complete', // Ensure uploadStatus is not null
         thumbnailB2FileId: image.thumbnailB2FileId,
         thumbnailB2FileName: image.thumbnailB2FileName,
         createdAt: image.createdAt,
