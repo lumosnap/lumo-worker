@@ -42,6 +42,19 @@ export default function createApp() {
   // CORS for all routes (placed before auth middleware)
   app.use('*', cors({
     origin: (origin, c) => {
+      // Parse BRANCH_URLS from environment (supports JSON array or comma-separated)
+      const branchUrls: string[] = (() => {
+        if (!c.env.BRANCH_URLS) return [];
+        try {
+          const parsed = JSON.parse(c.env.BRANCH_URLS);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          // Fallback to comma-separated
+          return c.env.BRANCH_URLS.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      })();
+
+      // Existing allowed origins
       const allowedOrigins = [
         'http://localhost:3000',
         'http://localhost:5173',
@@ -53,7 +66,22 @@ export default function createApp() {
       // Allow requests with no origin (like mobile apps or curl)
       if (!origin) return null;
 
-      return allowedOrigins.includes(origin) ? origin : null;
+      // Check if origin is in allowed origins list
+      if (allowedOrigins.includes(origin)) return origin;
+
+      // Check if origin's domain matches any branch URL or its subdomains
+      try {
+        const originHostname = new URL(origin).hostname;
+        if (branchUrls.some(branchUrl => 
+          originHostname === branchUrl || originHostname.endsWith('.' + branchUrl)
+        )) {
+          return origin;
+        }
+      } catch {
+        // Invalid URL format, skip branch URL check
+      }
+
+      return null;
     },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],

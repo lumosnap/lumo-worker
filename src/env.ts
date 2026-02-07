@@ -33,6 +33,7 @@ const EnvSchema = z.object({
   ONBOARDING_URL: z.string(),
   ADMIN_DOMAIN: z.string(),
   SUPER_ADMIN_EMAIL: z.string(),
+  BRANCH_URLS: z.string().default(""),
 });
 
 // Environment type combines validated env vars with D1 binding
