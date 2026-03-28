@@ -68,9 +68,34 @@ export const verification = sqliteTable(
     (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+export const deviceCode = sqliteTable(
+    "deviceCode",
+    {
+        id: text("id").primaryKey(),
+        deviceCode: text("device_code").notNull().unique(),
+        userCode: text("user_code").notNull().unique(),
+        userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+        status: text("status").notNull().default("pending"),
+        expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+        lastPolledAt: integer("last_polled_at", { mode: "timestamp" }),
+        clientId: text("client_id"),
+        scope: text("scope"),
+        createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
+        updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
+    },
+    (table) => [
+        index("deviceCode_userCode_idx").on(table.userCode),
+        index("deviceCode_deviceCode_idx").on(table.deviceCode),
+        index("deviceCode_userId_idx").on(table.userId),
+        index("deviceCode_status_idx").on(table.status),
+        index("deviceCode_expiresAt_idx").on(table.expiresAt),
+    ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
     sessions: many(session),
     accounts: many(account),
+    deviceCodes: many(deviceCode),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -83,6 +108,13 @@ export const sessionRelations = relations(session, ({ one }) => ({
 export const accountRelations = relations(account, ({ one }) => ({
     user: one(user, {
         fields: [account.userId],
+        references: [user.id],
+    }),
+}));
+
+export const deviceCodeRelations = relations(deviceCode, ({ one }) => ({
+    user: one(user, {
+        fields: [deviceCode.userId],
         references: [user.id],
     }),
 }));

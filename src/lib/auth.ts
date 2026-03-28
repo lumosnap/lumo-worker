@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin, bearer } from "better-auth/plugins";
+import { admin, bearer, deviceAuthorization } from "better-auth/plugins";
 import type { Environment } from "@/env";
 import { profiles } from "@/db/d1-schema/profiles";
 import { subscriptions, plans } from "@/db/d1-schema/billing";
@@ -9,6 +9,8 @@ import { eq } from "drizzle-orm";
 import { user } from "@/db/d1-schema/auth";
 
 export function createAuth(db: any, env: Environment) {
+  const verificationUri = `${env.ONBOARDING_URL.replace(/\/$/, "")}/device`;
+
   return betterAuth({
     database: drizzleAdapter(db, {
       provider: "sqlite"
@@ -51,6 +53,11 @@ export function createAuth(db: any, env: Environment) {
         adminRoles: ["superadmin", "admin", "staff"], // superadmin, admin, and staff have admin-level permissions
       }),
       bearer(),
+      deviceAuthorization({
+        verificationUri,
+        expiresIn: env.DEVICE_AUTH_EXPIRES_IN ?? "30m",
+        interval: env.DEVICE_AUTH_INTERVAL ?? "5s",
+      }),
     ],
     databaseHooks: {
       user: {

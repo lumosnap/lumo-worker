@@ -15,6 +15,8 @@ const EnvSchema = z.object({
   GOOGLE_DESKTOP_CLIENT_SECRET: z.string().min(1).max(128),
   BETTER_AUTH_SECRET: z.string().min(32).max(128),
   BETTER_AUTH_URL: z.string().min(1).max(256),
+  DEVICE_AUTH_EXPIRES_IN: z.string().optional(),
+  DEVICE_AUTH_INTERVAL: z.string().optional(),
   STORAGE_API_KEY_ID: z.string().min(1).max(128),
   STORAGE_API_KEY: z.string().min(1).max(128),
   STORAGE_BUCKET_ID: z.string().min(1).max(128),
