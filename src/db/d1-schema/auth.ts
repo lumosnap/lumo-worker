@@ -78,6 +78,7 @@ export const deviceCode = sqliteTable(
         status: text("status").notNull().default("pending"),
         expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
         lastPolledAt: integer("last_polled_at", { mode: "timestamp" }),
+        pollingInterval: integer("polling_interval"),
         clientId: text("client_id"),
         scope: text("scope"),
         createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
