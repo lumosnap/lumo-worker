@@ -1,1 +1,0 @@
-ALTER TABLE "albums" ADD COLUMN "is_secondary_storage" boolean DEFAULT false;

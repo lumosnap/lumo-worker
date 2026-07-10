@@ -1,1 +1,0 @@
-ALTER TABLE "profiles" ADD COLUMN "total_images" integer DEFAULT 0 NOT NULL;

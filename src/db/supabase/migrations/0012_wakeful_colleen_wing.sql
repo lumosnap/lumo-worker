@@ -1,1 +1,0 @@
-ALTER TABLE "images" ALTER COLUMN "b2_file_id" DROP NOT NULL;
