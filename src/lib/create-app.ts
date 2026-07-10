@@ -1,6 +1,8 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { notFound, onError, serveEmojiFavicon } from "stoker/middlewares";
+import { notFound, serveEmojiFavicon } from "stoker/middlewares";
 import { defaultHook } from "stoker/openapi";
+import { HTTPException } from "hono/http-exception";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { parseEnv } from "@/env";
 import { pinoLogger } from "@/middlewares/pino-logger";
 import { authMiddleware } from "@/middlewares/auth";
@@ -107,7 +109,26 @@ export default function createApp() {
 
   // Error handlers
   app.notFound(notFound);
-  app.onError(onError);
+
+  // Central error boundary. Route handlers let unexpected errors propagate here
+  // instead of each re-implementing a generic 500. The response keeps the shared
+  // `errorResponseSchema` shape ({ success, message }) that every route declares.
+  app.onError((err, c) => {
+    c.get("logger")?.error({ err }, "Unhandled request error");
+
+    const status: ContentfulStatusCode
+      = err instanceof HTTPException
+        ? (err.status as ContentfulStatusCode)
+        : HttpStatusCodes.INTERNAL_SERVER_ERROR;
+
+    return c.json(
+      {
+        success: false,
+        message: err.message || "Internal server error",
+      },
+      status,
+    );
+  });
 
   return app;
 }
