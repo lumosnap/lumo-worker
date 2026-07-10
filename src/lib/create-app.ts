@@ -95,7 +95,7 @@ export default function createApp() {
   // Better Auth middleware for session management
   app.use("*", authMiddleware);
 
-  // Scalar API reference protection - simplified ✅
+  // Gate /reference behind SCALAR_OPENAPI_CLIENT_KEY
   app.use('/reference', async (c, next) => {
     const secretKey = c.req.query('key');
     if (secretKey === c.env.SCALAR_OPENAPI_CLIENT_KEY) {

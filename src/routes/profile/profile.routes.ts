@@ -58,9 +58,7 @@ const billingAddressesResponseSchema = z.object({
   data: z.array(billingAddressSchema).optional(),
 });
 
-// ==================================================
 // Routes
-// ==================================================
 
 // GET current user's profile
 export const getProfileRoute = createRoute({

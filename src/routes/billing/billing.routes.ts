@@ -52,9 +52,7 @@ const subscriptionResponseSchema = z.object({
   data: subscriptionWithPlanSchema.optional(),
 });
 
-// ==================================================
 // Routes
-// ==================================================
 
 // GET all plans
 export const getPlansRoute = createRoute({

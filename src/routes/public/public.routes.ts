@@ -52,9 +52,7 @@ const favoriteResponseSchema = z.object({
   data: favoriteSchema.optional(),
 });
 
-// ==================================================
 // Routes
-// ==================================================
 
 // GET album by share token
 export const getAlbumByTokenRoute = createRoute({
