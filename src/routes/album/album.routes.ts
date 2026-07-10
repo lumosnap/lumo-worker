@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
+import { commentSchema, errorResponseSchema } from "@/lib/openapi-schemas";
 
 
 const albumSchema = z.object({
@@ -138,10 +139,7 @@ const albumImagesResponseSchema = z.object({
   data: albumWithImagesSchema.optional(),
 });
 
-const deleteImageResponseSchema = z.object({
-  success: z.boolean(),
-  message: z.string(),
-});
+const deleteImageResponseSchema = errorResponseSchema;
 
 const bulkDeleteImagesSchema = z.object({
   imageIds: z.array(z.number().int()).min(1),
@@ -154,12 +152,6 @@ const bulkDeleteImagesResponseSchema = z.object({
     deletedCount: z.number(),
     failedCount: z.number(),
   }).optional(),
-});
-
-const commentSchema = z.object({
-  clientName: z.string(),
-  notes: z.string().nullable(),
-  createdAt: z.string().datetime(),
 });
 
 const favoriteImageSchema = z.object({
@@ -228,31 +220,19 @@ export const createShareLinkRoute = createRoute({
       "Share link created successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User doesn't own this album",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -271,17 +251,11 @@ export const listAlbumsRoute = createRoute({
       "Album entries retrieved successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -306,17 +280,11 @@ export const createAlbumRoute = createRoute({
       "Album entry created successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -347,31 +315,19 @@ export const generateUploadUrlRoute = createRoute({
       "Upload URLs created successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User doesn't own this album",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -414,31 +370,19 @@ export const confirmUploadRoute = createRoute({
       "Partial success - some images saved, some failed",
     ),
     [HttpStatusCodes.BAD_REQUEST]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Invalid request - no images provided",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User doesn't own this album",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album not found",
     ),
     [HttpStatusCodes.UNPROCESSABLE_ENTITY]: jsonContent(
@@ -453,10 +397,7 @@ export const confirmUploadRoute = createRoute({
       "Failed to save any image metadata",
     ),
     [HttpStatusCodes.SERVICE_UNAVAILABLE]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Database temporarily unavailable",
     ),
   },
@@ -483,31 +424,19 @@ export const updateImagesRoute = createRoute({
       "Images updated successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User doesn't own this album",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album or image not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -530,31 +459,19 @@ export const getAlbumImagesRoute = createRoute({
       "Album and images retrieved successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User doesn't own this album",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -578,31 +495,19 @@ export const deleteImageRoute = createRoute({
       "Image deleted successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User doesn't own this album",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album or image not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -629,31 +534,19 @@ export const bulkDeleteImagesRoute = createRoute({
       "Images deleted successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User doesn't own this album",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -679,31 +572,19 @@ export const getAlbumFavoritesRoute = createRoute({
       "Favorites retrieved successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User doesn't own this album",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -726,31 +607,19 @@ export const deleteAlbumRoute = createRoute({
       "Album deleted successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User not authenticated",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "User doesn't own this album",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },

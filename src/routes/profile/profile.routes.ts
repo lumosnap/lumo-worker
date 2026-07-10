@@ -1,12 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
-
-// Shared error response schema
-const errorResponseSchema = z.object({
-  success: z.boolean(),
-  message: z.string(),
-});
+import { bookingSchema, errorResponseSchema } from "@/lib/openapi-schemas";
 
 const profileSchema = z.object({
   id: z.number(),
@@ -314,19 +309,6 @@ export const getBookingUrlRoute = createRoute({
       "Internal server error",
     ),
   },
-});
-
-const bookingSchema = z.object({
-  id: z.number(),
-  photographerId: z.string(),
-  eventType: z.string(),
-  name: z.string(),
-  phone: z.string(),
-  eventDate: z.string(), // date type in drizzle usually comes as string or Date object, but for json response string is safe
-  location: z.string(),
-  details: z.string().nullable(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
 });
 
 const bookingsResponseSchema = z.object({

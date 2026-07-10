@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
+import { errorResponseSchema } from "@/lib/openapi-schemas";
 
 // Schema for single test response
 const testResponseSchema = z.object({
@@ -41,10 +42,7 @@ export const listTestsRoute = createRoute({
       "Test entries retrieved successfully",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -68,17 +66,11 @@ export const getTestRoute = createRoute({
       "Test entry retrieved successfully",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Test entry not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -107,10 +99,7 @@ export const createTestRoute = createRoute({
       "Test entry created successfully",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },

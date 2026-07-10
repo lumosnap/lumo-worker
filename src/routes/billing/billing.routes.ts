@@ -1,12 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
-
-// Shared error response schema
-const errorResponseSchema = z.object({
-  success: z.boolean(),
-  message: z.string(),
-});
+import { errorResponseSchema } from "@/lib/openapi-schemas";
 
 const planSchema = z.object({
   id: z.number(),
@@ -74,10 +69,7 @@ export const getPlansRoute = createRoute({
       "Plans retrieved successfully",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },

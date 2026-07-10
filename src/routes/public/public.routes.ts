@@ -1,12 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
-
-const commentSchema = z.object({
-  clientName: z.string(),
-  notes: z.string().nullable(),
-  createdAt: z.string().datetime(),
-});
+import { bookingSchema, commentSchema, errorResponseSchema } from "@/lib/openapi-schemas";
 
 const userFavoriteSchema = z.object({
   id: z.number(),
@@ -107,17 +102,11 @@ export const getAlbumByTokenRoute = createRoute({
       "Album retrieved successfully",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -148,17 +137,11 @@ export const getFavoriteImagesRoute = createRoute({
       "Favorite images retrieved successfully",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -186,24 +169,15 @@ export const createFavoriteRoute = createRoute({
       "Favorite created successfully",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album or image not found",
     ),
     [HttpStatusCodes.CONFLICT]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Favorite already exists",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -228,31 +202,19 @@ export const deleteFavoriteRoute = createRoute({
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Favorite deleted successfully",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Client name does not match",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Favorite not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -281,24 +243,15 @@ export const updateNotesRoute = createRoute({
       "Notes updated successfully",
     ),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Client name does not match",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Favorite not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -345,17 +298,11 @@ export const batchFavoritesRoute = createRoute({
       "Batch operations completed",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Album not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -376,19 +323,6 @@ const createBookingSchema = z.object({
   eventDate: z.string(), // ISO date string YYYY-MM-DD
   location: z.string().min(1).max(500),
   details: z.string().optional(),
-});
-
-const bookingSchema = z.object({
-  id: z.number(),
-  photographerId: z.string(),
-  eventType: z.string(),
-  name: z.string(),
-  phone: z.string(),
-  eventDate: z.string(),
-  location: z.string(),
-  details: z.string().nullable(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
 });
 
 const bookingResponseSchema = z.object({
@@ -419,17 +353,11 @@ export const getPhotographerDetailsRoute = createRoute({
       "Photographer details retrieved successfully",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Photographer not found",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },
@@ -457,24 +385,15 @@ export const createBookingRoute = createRoute({
       "Booking created successfully",
     ),
     [HttpStatusCodes.NOT_FOUND]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Photographer not found",
     ),
     [HttpStatusCodes.BAD_REQUEST]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Invalid booking data",
     ),
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-      z.object({
-        success: z.boolean(),
-        message: z.string(),
-      }),
+      errorResponseSchema,
       "Internal server error",
     ),
   },

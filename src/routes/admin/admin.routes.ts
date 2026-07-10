@@ -1,6 +1,7 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
+import { errorResponseSchema } from "@/lib/openapi-schemas";
 
 // Response schemas
 const statsResponseSchema = z.object({
@@ -38,11 +39,6 @@ const setRoleResponseSchema = z.object({
     success: z.boolean(),
     message: z.string(),
     data: userSchema.optional(),
-});
-
-const errorResponseSchema = z.object({
-    success: z.boolean(),
-    message: z.string(),
 });
 
 // GET /admin/stats - Platform statistics (any admin)

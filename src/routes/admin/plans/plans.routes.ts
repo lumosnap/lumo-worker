@@ -1,17 +1,12 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent, jsonContentRequired } from "stoker/openapi/helpers";
+import { errorResponseSchema, PlanSchema as BasePlanSchema } from "@/lib/openapi-schemas";
 
 const tags = ["Admin Plans"];
 
-// Schema for Plan
-const PlanSchema = z.object({
-    id: z.number(),
-    name: z.string(),
-    displayName: z.string(),
-    imageLimit: z.number(),
-    priceMonthly: z.union([z.string(), z.number()]).transform((val) => String(val)),
-    description: z.string().nullable().optional(),
+// Admin plan view extends the shared base plan with isActive.
+const PlanSchema = BasePlanSchema.extend({
     isActive: z.boolean().optional(),
 });
 
@@ -64,11 +59,11 @@ export const listPlans = createRoute({
             "List of plans"
         ),
         [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-            z.object({ success: z.boolean(), message: z.string() }),
+            errorResponseSchema,
             "Unauthorized"
         ),
         [HttpStatusCodes.FORBIDDEN]: jsonContent(
-            z.object({ success: z.boolean(), message: z.string() }),
+            errorResponseSchema,
             "Forbidden"
         ),
     },
@@ -90,11 +85,11 @@ export const createPlan = createRoute({
             "Plan created"
         ),
         [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-            z.object({ success: z.boolean(), message: z.string() }),
+            errorResponseSchema,
             "Unauthorized"
         ),
         [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
-            z.object({ success: z.boolean(), message: z.string() }),
+            errorResponseSchema,
             "Internal server error"
         ),
     },
@@ -127,11 +122,11 @@ export const updatePlan = createRoute({
             "Plan updated"
         ),
         [HttpStatusCodes.NOT_FOUND]: jsonContent(
-            z.object({ success: z.boolean(), message: z.string() }),
+            errorResponseSchema,
             "Plan not found"
         ),
         [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-            z.object({ success: z.boolean(), message: z.string() }),
+            errorResponseSchema,
             "Unauthorized"
         ),
     },
@@ -155,7 +150,7 @@ export const listUpgradeRequests = createRoute({
             "List of upgrade requests"
         ),
         [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
-            z.object({ success: z.boolean(), message: z.string() }),
+            errorResponseSchema,
             "Unauthorized"
         ),
     },
@@ -173,14 +168,11 @@ export const approveUpgradeRequest = createRoute({
     },
     responses: {
         [HttpStatusCodes.OK]: jsonContent(
-            z.object({
-                success: z.boolean(),
-                message: z.string(),
-            }),
+            errorResponseSchema,
             "Request approved"
         ),
         [HttpStatusCodes.NOT_FOUND]: jsonContent(
-            z.object({ success: z.boolean(), message: z.string() }),
+            errorResponseSchema,
             "Request not found"
         ),
     },
@@ -198,14 +190,11 @@ export const rejectUpgradeRequest = createRoute({
     },
     responses: {
         [HttpStatusCodes.OK]: jsonContent(
-            z.object({
-                success: z.boolean(),
-                message: z.string(),
-            }),
+            errorResponseSchema,
             "Request rejected"
         ),
         [HttpStatusCodes.NOT_FOUND]: jsonContent(
-            z.object({ success: z.boolean(), message: z.string() }),
+            errorResponseSchema,
             "Request not found"
         ),
     },
