@@ -1,14 +1,21 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin, bearer, deviceAuthorization } from "better-auth/plugins";
+import type { DeviceAuthorizationOptions } from "better-auth/plugins";
 import type { Environment } from "@/env";
 import { profiles } from "@/db/d1-schema/profiles";
 import { subscriptions, plans } from "@/db/d1-schema/billing";
 
 import { eq } from "drizzle-orm";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { user } from "@/db/d1-schema/auth";
+import type * as schema from "@/db/d1-schema";
 
-export function createAuth(db: any, env: Environment) {
+// Better Auth's deviceAuthorization expects the `ms`-style StringValue brand for
+// durations; env vars arrive as plain strings, so narrow through this alias.
+type DurationValue = NonNullable<DeviceAuthorizationOptions["expiresIn"]>;
+
+export function createAuth(db: DrizzleD1Database<typeof schema>, env: Environment) {
   const verificationUri = `${env.ONBOARDING_URL.replace(/\/$/, "")}/device`;
 
   return betterAuth({
@@ -55,8 +62,8 @@ export function createAuth(db: any, env: Environment) {
       bearer(),
       deviceAuthorization({
         verificationUri,
-        expiresIn: env.DEVICE_AUTH_EXPIRES_IN ?? "30m",
-        interval: env.DEVICE_AUTH_INTERVAL ?? "5s",
+        expiresIn: (env.DEVICE_AUTH_EXPIRES_IN ?? "30m") as DurationValue,
+        interval: (env.DEVICE_AUTH_INTERVAL ?? "5s") as DurationValue,
       }),
     ],
     databaseHooks: {

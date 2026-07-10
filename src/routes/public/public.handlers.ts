@@ -176,7 +176,7 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
 
     // Generate view URLs for images with favorite data
     const imagesWithFavoriteData = await Promise.all(
-      paginatedImages.map(async (img: any) => {
+      paginatedImages.map(async (img) => {
         const imageFavorites = favoritesByImage.get(img.id) || [];
 
         // Build comments array (all favorites for this image)

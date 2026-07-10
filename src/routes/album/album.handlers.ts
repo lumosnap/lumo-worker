@@ -439,7 +439,7 @@ export const createAlbum: AppRouteHandler<CreateAlbumRoute> = async (c) => {
     }
 
     // Use the authenticated user's ID, not the request body
-    const valuesToInsert: any = {
+    const valuesToInsert: typeof albums.$inferInsert = {
       id,
       title: body.title,
       userId: user.id,  // Always use authenticated user's ID

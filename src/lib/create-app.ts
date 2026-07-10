@@ -24,7 +24,7 @@ export default function createApp() {
     // eslint-disable-next-line node/no-process-env
     const parsedEnv = parseEnv(Object.assign(c.env || {}, process.env));
     // Preserve D1 binding from Cloudflare runtime
-    c.env = { ...parsedEnv, lumo_db: (c.env as any).lumo_db } as typeof c.env;
+    c.env = { ...parsedEnv, lumo_db: c.env.lumo_db } as typeof c.env;
     return next();
   });
 
@@ -50,7 +50,7 @@ export default function createApp() {
           return Array.isArray(parsed) ? parsed : [];
         } catch {
           // Fallback to comma-separated
-          return c.env.BRANCH_URLS.split(',').map(s => s.trim()).filter(Boolean);
+          return c.env.BRANCH_URLS.split(',').map((s: string) => s.trim()).filter(Boolean);
         }
       })();
 

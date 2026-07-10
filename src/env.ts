@@ -41,7 +41,7 @@ export type Environment = z.infer<typeof EnvSchema> & {
   lumo_db: D1Database;
 };
 
-export function parseEnv(data: any) {
+export function parseEnv(data: unknown) {
   const { data: env, error } = EnvSchema.safeParse(data);
   if (error) {
     const errorMessage = `❌ Invalid env - ${Object.entries(error.flatten().fieldErrors)
