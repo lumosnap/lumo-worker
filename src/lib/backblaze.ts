@@ -83,8 +83,9 @@ export const useBackBlaze = async (env: Environment) => {
 
   const getPublicUrl = (key: string, isSecondaryStorage: boolean = false) => {
     const config = getStorageConfig(isSecondaryStorage);
-    // Public URL format: STORAGE_PUBLIC_URL_BASE/STORAGE_BUCKET_NAME/album_id/original_filename
-    return `${config.publicUrlBase}/${config.bucketName}/${key}`;
+    // publicUrlBase already includes the bucket path segment where the provider
+    // needs one (Backblaze path-style); Scaleway is virtual-hosted so it doesn't.
+    return `${config.publicUrlBase}/${key}`;
   };
 
   const deleteFile = async (fileId: string, isSecondaryStorage: boolean = false) => {
