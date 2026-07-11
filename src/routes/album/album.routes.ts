@@ -26,7 +26,7 @@ const createAlbumSchema = z.object({
   eventDate: z.string().optional().describe("The date of the event (e.g., '2025-12-31')."),
   expiresAt: z.string().datetime().optional().describe("The expiration date for a share link."),
   isPublic: z.boolean().optional().describe("Whether the album is publicly visible."),
-  isSecondaryStorage: z.boolean().optional().describe("Whether to use secondary storage for this album.").default(false),
+  isSecondaryStorage: z.boolean().optional().describe("Whether to use secondary storage (Backblaze) for this album. Defaults true — Backblaze is the main provider.").default(true),
 });
 
 const singleAlbumResponseSchema = z.object({
