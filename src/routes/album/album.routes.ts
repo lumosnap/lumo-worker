@@ -827,80 +827,6 @@ export const putClientPersonRoute = createRoute({
   },
 })
 
-const setLimitSchema = z.object({ setId: z.string().min(1).max(64), max: z.number().int().min(0).max(100000) });
-
-const selectionListSchema = z.object({
-  id: z.string().min(1).max(64).describe("Client-generated list id."),
-  name: z.string().min(1).max(80),
-  position: z.number().int(),
-  maxPicks: z.number().int().min(1).max(100000).nullable(),
-  deadline: z.number().int().nullable().describe("Unix ms; after it clients can no longer change picks."),
-  setLimits: z.array(setLimitSchema).max(300).nullable().describe("Per-set caps; only images in that set count."),
-});
-
-export const putAlbumListsRoute = createRoute({
-  tags: ["Albums"],
-  method: "put",
-  summary: "Replace album selection lists",
-  description: "Upsert the album's selection lists by id. Lists not sent are deleted with their picks and submissions.",
-  path: "/albums/:albumId/lists",
-  request: {
-    params: z.object({ albumId: z.string() }),
-    body: jsonContent(
-      z.object({
-        lists: z.array(selectionListSchema).max(20)
-          .refine(lists => new Set(lists.map(l => l.id)).size === lists.length, "Duplicate list id"),
-      }),
-      "The album's complete selection lists",
-    ),
-  },
-  responses: {
-    [HttpStatusCodes.OK]: jsonContent(z.object({ success: z.boolean(), lists: z.number() }), "Lists replaced"),
-    ...ownerErrorResponses,
-  },
-})
-
-export const getAlbumListsRoute = createRoute({
-  tags: ["Albums"],
-  method: "get",
-  summary: "Get album selection lists",
-  description: "All selection lists of an album with each client's picks and submission state.",
-  path: "/albums/:albumId/lists",
-  request: {
-    params: z.object({ albumId: z.string() }),
-  },
-  responses: {
-    [HttpStatusCodes.OK]: jsonContent(
-      z.object({
-        lists: z.array(selectionListSchema.extend({
-          clients: z.array(z.object({
-            clientName: z.string(),
-            imageIds: z.array(z.number()),
-            submittedAt: z.number().nullable().describe("Unix ms"),
-          })),
-        })),
-      }),
-      "Album selection lists",
-    ),
-    ...ownerErrorResponses,
-  },
-})
-
-export const deleteListSubmissionRoute = createRoute({
-  tags: ["Albums"],
-  method: "delete",
-  summary: "Unlock a client's list",
-  description: "Remove a client's submission so they can edit their picks again.",
-  path: "/albums/:albumId/lists/:listId/submissions/:clientName",
-  request: {
-    params: z.object({ albumId: z.string(), listId: z.string(), clientName: z.string().min(1).max(255) }),
-  },
-  responses: {
-    [HttpStatusCodes.OK]: jsonContent(z.object({ success: z.boolean() }), "Submission removed"),
-    ...ownerErrorResponses,
-  },
-})
-
 export const vectorsUploadUrlRoute = createRoute({
   tags: ["Albums"],
   method: "post",
@@ -981,9 +907,6 @@ export type GetAlbumSetsRoute = typeof getAlbumSetsRoute;
 export type PutAlbumPeopleRoute = typeof putAlbumPeopleRoute;
 export type GetAlbumPeopleRoute = typeof getAlbumPeopleRoute;
 export type PutClientPersonRoute = typeof putClientPersonRoute;
-export type PutAlbumListsRoute = typeof putAlbumListsRoute;
-export type GetAlbumListsRoute = typeof getAlbumListsRoute;
-export type DeleteListSubmissionRoute = typeof deleteListSubmissionRoute;
 export type VectorsUploadUrlRoute = typeof vectorsUploadUrlRoute;
 export type PutAlbumVectorsRoute = typeof putAlbumVectorsRoute;
 export type DeleteAlbumVectorsRoute = typeof deleteAlbumVectorsRoute;

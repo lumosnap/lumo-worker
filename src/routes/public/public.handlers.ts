@@ -1,4 +1,4 @@
-import { albums, images, favorites, selectionLists, listPicks, listSubmissions, setImages } from "@/db/d1-schema/albums";
+import { albums, images, favorites } from "@/db/d1-schema/albums";
 import { profiles } from "@/db/d1-schema/profiles";
 import { user } from "@/db/d1-schema/auth";
 import { bookings } from "@/db/d1-schema/bookings";
@@ -6,7 +6,6 @@ import type { AppRouteHandler, AppBindings } from "@/lib/types";
 import { useImageUrlCache } from "@/lib/image-cache";
 import { loadAlbumSets } from "@/lib/album-sets";
 import { loadAlbumPeople } from "@/lib/album-people";
-import { loadAlbumLists, loadListActivity } from "@/lib/album-lists";
 import { eq, and, desc, asc, count, isNotNull, ne, sql } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type {
@@ -19,24 +18,8 @@ import type {
   UpdateNotesRoute,
   GetPhotographerDetailsRoute,
   CreateBookingRoute,
-  BatchFavoritesRoute,
-  PutListPicksRoute,
-  SubmitListRoute
+  BatchFavoritesRoute
 } from "./public.routes";
-
-// D1 caps bound parameters at 100 per statement.
-const chunk = <T,>(rows: T[], size: number): T[][] =>
-  Array.from({ length: Math.ceil(rows.length / size) }, (_, i) => rows.slice(i * size, (i + 1) * size));
-
-// FNV-1a, for folding small JSON into an ETag.
-const hash32 = (str: string) => {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 0x01000193);
-  return (h >>> 0).toString(36);
-};
-
-// JSON array bound as one parameter, so id lists of any length stay under D1's 100-param limit.
-const jsonIds = (ids: Array<string | number>) => sql`(select value from json_each(${JSON.stringify(ids)}))`;
 
 const isBrowseV2 = (features: string | null): boolean => {
   if (!features) return false;
@@ -313,7 +296,7 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
     );
   }
 
-  const [rows, ownerName, sets, people, lists] = await Promise.all([db
+  const [rows, ownerName, sets, people] = await Promise.all([db
     .select({
       id: images.id,
       f: images.b2FileName,
@@ -330,19 +313,18 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
     })
     .from(images)
     .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')))
-    .orderBy(asc(images.uploadOrder)), getOwnerName(db, album.userId!), loadAlbumSets(db, album.id), loadAlbumPeople(db, album.id), loadAlbumLists(db, album.id)]);
+    .orderBy(asc(images.uploadOrder)), getOwnerName(db, album.userId!), loadAlbumSets(db, album.id), loadAlbumPeople(db, album.id)]);
 
   // Version signal: album.updatedAt is bumped on upload/patch/delete; count + max id cover same-second changes.
   // ponytail: updatedAt has 1s resolution, so two patches inside one second can share an ETag until max-age expires.
   // ponytail: ownerName is not in the ETag; a profile rename shows on the next album change. Hash it in if that matters.
   const maxId = rows.reduce((max, img) => Math.max(max, img.id), 0);
   const browseV2 = isBrowseV2(album.features);
-  const manifestLists = lists.map((l) => ({ id: l.id, name: l.name, maxPicks: l.maxPicks, deadline: l.deadline, setLimits: l.setLimits }));
   const base = album.isSecondaryStorage ? c.env.STORAGE2_PUBLIC_URL_BASE : c.env.STORAGE_PUBLIC_URL_BASE;
   const vectors = album.vectorsKey
     ? { url: `${base}/${album.vectorsKey}`, count: album.vectorsCount ?? 0, model: album.vectorsModel ?? '' }
     : null;
-  const etag = `W/"${album.updatedAt.getTime()}-${rows.length}-${maxId}-${browseV2 ? 1 : 0}-${hash32(JSON.stringify([manifestLists, vectors]))}"`;
+  const etag = `W/"${album.updatedAt.getTime()}-${rows.length}-${maxId}-${browseV2 ? 1 : 0}"`;
 
   c.header('ETag', etag);
   c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
@@ -366,7 +348,6 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
       images: rows.map((img) => ({ ...img, bc: img.bc ?? false, g: img.g ? img.g.split(' ') : null })),
       sets: sets.map((s) => ({ id: s.id, name: s.name, cover: s.coverImageId, ids: s.imageIds })),
       people: people.map((p) => ({ id: p.id, name: p.name, cover: p.coverImageId, box: p.box, ids: p.imageIds })),
-      lists: manifestLists,
       vectors,
     },
     HttpStatusCodes.OK
@@ -395,7 +376,7 @@ export const getShareFeedback: AppRouteHandler<GetShareFeedbackRoute> = async (c
     );
   }
 
-  const [albumFavorites, albumLists, activity] = await Promise.all([db
+  const albumFavorites = await db
     .select({
       imageId: favorites.imageId,
       clientName: favorites.clientName,
@@ -403,14 +384,7 @@ export const getShareFeedback: AppRouteHandler<GetShareFeedbackRoute> = async (c
       createdAt: favorites.createdAt,
     })
     .from(favorites)
-    .where(eq(favorites.albumId, album.id)),
-    loadAlbumLists(db, album.id),
-    clientName ? loadListActivity(db, album.id, clientName) : Promise.resolve(new Map()),
-  ]);
-  const lists: Record<string, { imageIds: number[]; submittedAt: number | null }> = {};
-  for (const l of albumLists) {
-    lists[l.id] = activity.get(l.id)?.get(clientName!) ?? { imageIds: [], submittedAt: null };
-  }
+    .where(eq(favorites.albumId, album.id));
 
   // Same comment semantics as getAlbumByToken: every favorite on an image is a comment entry
   const favoritedByClient: number[] = [];
@@ -432,7 +406,6 @@ export const getShareFeedback: AppRouteHandler<GetShareFeedbackRoute> = async (c
       favorites: favoritedByClient,
       counts,
       comments,
-      lists,
     },
     HttpStatusCodes.OK
   );
@@ -999,97 +972,4 @@ export const createBooking: AppRouteHandler<CreateBookingRoute> = async (c) => {
     },
     HttpStatusCodes.CREATED
   );
-};
-
-// Album by share token + one of its lists; null when either is missing.
-const getShareList = async (db: AppBindings["Variables"]["db"], token: string, listId: string) => {
-  const [row] = await db
-    .select({ albumId: albums.id, maxPicks: selectionLists.maxPicks, deadline: selectionLists.deadline, setLimits: selectionLists.setLimits })
-    .from(albums)
-    .innerJoin(selectionLists, and(eq(selectionLists.albumId, albums.id), eq(selectionLists.id, listId)))
-    .where(eq(albums.shareLinkToken, token));
-  return row ?? null;
-};
-
-const notFound = { success: false, message: "Album or list not found" };
-
-export const putListPicks: AppRouteHandler<PutListPicksRoute> = async (c) => {
-  const db = c.get('db');
-  const { token, listId } = c.req.valid("param");
-  const { clientName, add, remove } = c.req.valid("json");
-
-  const list = await getShareList(db, token, listId);
-  if (!list) return c.json(notFound, HttpStatusCodes.NOT_FOUND);
-
-  const [[submitted], current, validAdds] = await Promise.all([
-    db.select({ at: listSubmissions.submittedAt }).from(listSubmissions)
-      .where(and(eq(listSubmissions.listId, listId), eq(listSubmissions.clientName, clientName))),
-    db.select({ id: listPicks.imageId }).from(listPicks)
-      .where(and(eq(listPicks.listId, listId), eq(listPicks.clientName, clientName))),
-    add.length
-      ? db.select({ id: images.id }).from(images).where(and(eq(images.albumId, list.albumId), sql`${images.id} in ${jsonIds(add)}`))
-      : Promise.resolve([]),
-  ]);
-  if (submitted || (list.deadline !== null && Date.now() > list.deadline)) {
-    return c.json({ error: 'locked' as const }, HttpStatusCodes.LOCKED);
-  }
-
-  const before = new Set(current.map(r => r.id));
-  const after = new Set(before);
-  for (const id of remove) after.delete(id);
-  for (const { id } of validAdds) after.add(id);
-
-  // A limit only blocks changes that grow past it, so lowering a limit never traps a client mid-trim.
-  if (list.maxPicks !== null && after.size > list.maxPicks && after.size > before.size) {
-    return c.json({ error: 'limit' as const, maxPicks: list.maxPicks }, HttpStatusCodes.CONFLICT);
-  }
-  const setLimits: Array<{ setId: string; max: number }> = list.setLimits ? JSON.parse(list.setLimits) : [];
-  if (setLimits.length) {
-    const touched = [...new Set([...before, ...after])];
-    const members = touched.length
-      ? await db.select({ setId: setImages.setId, imageId: setImages.imageId }).from(setImages)
-          .where(and(sql`${setImages.setId} in ${jsonIds(setLimits.map(l => l.setId))}`, sql`${setImages.imageId} in ${jsonIds(touched)}`))
-      : [];
-    for (const { setId, max } of setLimits) {
-      const inSet = members.filter(m => m.setId === setId);
-      const was = inSet.filter(m => before.has(m.imageId)).length;
-      const now = inSet.filter(m => after.has(m.imageId)).length;
-      if (now > max && now > was) {
-        return c.json({ error: 'limit' as const, maxPicks: list.maxPicks, setId, max }, HttpStatusCodes.CONFLICT);
-      }
-    }
-  }
-
-  // ponytail: check-then-write, so two concurrent requests from one client can overshoot a limit by a batch. Fine for one person tapping.
-  const removed = [...before].filter(id => !after.has(id));
-  const added = [...after].filter(id => !before.has(id));
-  if (removed.length || added.length) {
-    const now = new Date();
-    await db.batch([
-      db.delete(listPicks).where(and(
-        eq(listPicks.listId, listId),
-        eq(listPicks.clientName, clientName),
-        sql`${listPicks.imageId} in ${jsonIds(removed)}`,
-      )),
-      ...chunk(added.map(imageId => ({ listId, imageId, clientName, createdAt: now })), 25) // 4 params per row
-        .map(rows => db.insert(listPicks).values(rows).onConflictDoNothing()),
-    ]);
-  }
-
-  return c.json({ imageIds: [...after].sort((a, b) => a - b) }, HttpStatusCodes.OK);
-};
-
-export const submitList: AppRouteHandler<SubmitListRoute> = async (c) => {
-  const db = c.get('db');
-  const { token, listId } = c.req.valid("param");
-  const { clientName } = c.req.valid("json");
-
-  const list = await getShareList(db, token, listId);
-  if (!list) return c.json(notFound, HttpStatusCodes.NOT_FOUND);
-
-  await db.insert(listSubmissions).values({ listId, clientName, submittedAt: Date.now() }).onConflictDoNothing();
-  const [row] = await db.select({ submittedAt: listSubmissions.submittedAt }).from(listSubmissions)
-    .where(and(eq(listSubmissions.listId, listId), eq(listSubmissions.clientName, clientName)));
-
-  return c.json({ submittedAt: row!.submittedAt }, HttpStatusCodes.OK);
 };
