@@ -95,3 +95,40 @@ export const setImages = sqliteTable("set_images", {
         imageIdIdx: index('set_images_image_id_idx').on(t.imageId),
     }
 });
+
+// Recognized faces/people. The desktop app owns them; rows are upserted so client links survive a re-sync.
+export const albumPeople = sqliteTable("album_people", {
+    id: text("id").primaryKey(), // client-generated
+    albumId: text("album_id", { length: 25 }).notNull().references(() => albums.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    position: integer("position").notNull().default(0),
+    coverImageId: integer("cover_image_id").references(() => images.id, { onDelete: "set null" }),
+    box: text("box"), // JSON [x,y,w,h], normalized 0..1, on the cover image
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
+}, (t) => {
+    return {
+        albumPositionIdx: index('album_people_album_position_idx').on(t.albumId, t.position),
+    }
+});
+
+export const imagePeople = sqliteTable("image_people", {
+    personId: text("person_id").notNull().references(() => albumPeople.id, { onDelete: "cascade" }),
+    imageId: integer("image_id").notNull().references(() => images.id, { onDelete: "cascade" }),
+}, (t) => {
+    return {
+        pk: primaryKey({ columns: [t.personId, t.imageId] }),
+        imageIdIdx: index('image_people_image_id_idx').on(t.imageId),
+    }
+});
+
+// Which person a share-link client is. Owner-only; never exposed publicly.
+export const clientPeople = sqliteTable("client_people", {
+    albumId: text("album_id", { length: 25 }).notNull().references(() => albums.id, { onDelete: "cascade" }),
+    clientName: text("client_name").notNull(),
+    personId: text("person_id").references(() => albumPeople.id, { onDelete: "set null" }),
+}, (t) => {
+    return {
+        pk: primaryKey({ columns: [t.albumId, t.clientName] }),
+    }
+});

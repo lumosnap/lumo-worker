@@ -156,6 +156,13 @@ export const getShareManifestRoute = createRoute({
           cover: z.number().nullable().describe("coverImageId"),
           ids: z.array(z.number()).describe("image ids in set order"),
         })).describe("Photographer-defined sets, ordered by position"),
+        people: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          cover: z.number().nullable().describe("coverImageId"),
+          box: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable().describe("face box on cover, normalized [x,y,w,h]"),
+          ids: z.array(z.number()).describe("image ids"),
+        })).describe("Recognized people, ordered by position"),
       }),
       "Album manifest",
     ),

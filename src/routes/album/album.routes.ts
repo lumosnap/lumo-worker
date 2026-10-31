@@ -199,6 +199,10 @@ const favoritesResponseSchema = z.object({
   message: z.string(),
   data: z.array(favoriteImageSchema).optional(),
   clientNames: z.array(z.string()),
+  clients: z.array(z.object({
+    clientName: z.string(),
+    personId: z.string().nullable().describe("Album person this client is linked to"),
+  })).optional(),
 });
 
 const createShareLinkResponseSchema = z.object({
@@ -745,6 +749,84 @@ export const getAlbumSetsRoute = createRoute({
   },
 })
 
+const albumPersonSchema = z.object({
+  id: z.string().min(1).max(64).describe("Client-generated person id."),
+  name: z.string().min(1).max(80),
+  position: z.number().int(),
+  coverImageId: z.number().int().nullable(),
+  box: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1)])
+    .nullable().describe("Face box on the cover image, normalized [x,y,w,h]."),
+  imageIds: z.array(z.number().int()).describe("Server image ids this person appears in."),
+});
+
+const putAlbumPeopleSchema = z.object({
+  people: z.array(albumPersonSchema).max(300)
+    .refine(people => new Set(people.map(p => p.id)).size === people.length, "Duplicate person id"),
+});
+
+export const putAlbumPeopleRoute = createRoute({
+  tags: ["Albums"],
+  method: "put",
+  summary: "Replace album people",
+  description: "Atomically replace an album's people. Re-sent ids keep their client links; image ids not in this album are dropped.",
+  path: "/albums/:albumId/people",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+    body: jsonContent(putAlbumPeopleSchema, "The album's complete people list"),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({ success: z.boolean(), people: z.number(), memberships: z.number() }),
+      "People replaced",
+    ),
+    ...ownerErrorResponses,
+  },
+})
+
+export const getAlbumPeopleRoute = createRoute({
+  tags: ["Albums"],
+  method: "get",
+  summary: "Get album people",
+  description: "All people of an album, ordered by position.",
+  path: "/albums/:albumId/people",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.object({ people: z.array(albumPersonSchema) }), "Album people"),
+    ...ownerErrorResponses,
+  },
+})
+
+export const putClientPersonRoute = createRoute({
+  tags: ["Albums"],
+  method: "put",
+  summary: "Link a client to a person",
+  description: "Link a share-link client name to one of the album's people, or unlink with personId null.",
+  path: "/albums/:albumId/client-people",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+    body: jsonContent(
+      z.object({ clientName: z.string().min(1).max(255), personId: z.string().nullable() }),
+      "Client link",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({ success: z.boolean(), clientName: z.string(), personId: z.string().nullable() }),
+      "Client link saved",
+    ),
+    [HttpStatusCodes.BAD_REQUEST]: jsonContent(errorResponseSchema, "Person not in this album"),
+    ...ownerErrorResponses,
+  },
+})
+
 export type CreateShareLinkRoute = typeof createShareLinkRoute;
 export type ListAlbumsRoute = typeof listAlbumsRoute;
 export type CreateAlbumRoute = typeof createAlbumRoute;
@@ -759,3 +841,6 @@ export type GetAlbumFavoritesRoute = typeof getAlbumFavoritesRoute;
 export type DeleteAlbumRoute = typeof deleteAlbumRoute;
 export type PutAlbumSetsRoute = typeof putAlbumSetsRoute;
 export type GetAlbumSetsRoute = typeof getAlbumSetsRoute;
+export type PutAlbumPeopleRoute = typeof putAlbumPeopleRoute;
+export type GetAlbumPeopleRoute = typeof getAlbumPeopleRoute;
+export type PutClientPersonRoute = typeof putClientPersonRoute;

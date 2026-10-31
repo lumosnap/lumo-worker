@@ -5,6 +5,7 @@ import { bookings } from "@/db/d1-schema/bookings";
 import type { AppRouteHandler, AppBindings } from "@/lib/types";
 import { useImageUrlCache } from "@/lib/image-cache";
 import { loadAlbumSets } from "@/lib/album-sets";
+import { loadAlbumPeople } from "@/lib/album-people";
 import { eq, and, desc, asc, count, isNotNull, ne, sql } from "drizzle-orm";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type {
@@ -292,7 +293,7 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
     );
   }
 
-  const [rows, ownerName, sets] = await Promise.all([db
+  const [rows, ownerName, sets, people] = await Promise.all([db
     .select({
       id: images.id,
       f: images.b2FileName,
@@ -309,7 +310,7 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
     })
     .from(images)
     .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')))
-    .orderBy(asc(images.uploadOrder)), getOwnerName(db, album.userId!), loadAlbumSets(db, album.id)]);
+    .orderBy(asc(images.uploadOrder)), getOwnerName(db, album.userId!), loadAlbumSets(db, album.id), loadAlbumPeople(db, album.id)]);
 
   // Version signal: album.updatedAt is bumped on upload/patch/delete; count + max id cover same-second changes.
   // ponytail: updatedAt has 1s resolution, so two patches inside one second can share an ETag until max-age expires.
@@ -339,6 +340,7 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
       base: album.isSecondaryStorage ? c.env.STORAGE2_PUBLIC_URL_BASE : c.env.STORAGE_PUBLIC_URL_BASE,
       images: rows.map((img) => ({ ...img, bc: img.bc ?? false, g: img.g ? img.g.split(' ') : null })),
       sets: sets.map((s) => ({ id: s.id, name: s.name, cover: s.coverImageId, ids: s.imageIds })),
+      people: people.map((p) => ({ id: p.id, name: p.name, cover: p.coverImageId, box: p.box, ids: p.imageIds })),
     },
     HttpStatusCodes.OK
   );

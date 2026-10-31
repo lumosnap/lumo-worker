@@ -1,14 +1,15 @@
-import { albums, images, favorites, albumSets, setImages } from "@/db/d1-schema/albums";
+import { albums, images, favorites, albumSets, setImages, albumPeople, imagePeople, clientPeople } from "@/db/d1-schema/albums";
 import { subscriptions, plans } from "@/db/d1-schema/billing";
 import { profiles } from "@/db/d1-schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
-import { eq, desc, and, sql, gt } from 'drizzle-orm';
+import { eq, desc, and, sql, gt, inArray, ne } from 'drizzle-orm';
 import * as HttpStatusCodes from "stoker/http-status-codes";
-import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, UpdateImageBrowseRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute, PutAlbumSetsRoute, GetAlbumSetsRoute } from "./album.routes";
+import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, UpdateImageBrowseRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute, PutAlbumSetsRoute, GetAlbumSetsRoute, PutAlbumPeopleRoute, GetAlbumPeopleRoute, PutClientPersonRoute } from "./album.routes";
 import { useBackBlaze } from "@/lib/backblaze";
 import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 import { getOwnedAlbum } from "@/lib/album-access";
 import { loadAlbumSets } from "@/lib/album-sets";
+import { loadAlbumPeople } from "@/lib/album-people";
 
 // Tags are stored space-joined; undefined leaves the column untouched, null or [] clears it.
 const joinTags = (tags: string[] | null | undefined) =>
@@ -283,6 +284,7 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
         message: "Favorites retrieved successfully",
         data: [],
         clientNames: [],
+        clients: [],
       },
       HttpStatusCodes.OK
     );
@@ -350,12 +352,19 @@ export const getAlbumFavorites: AppRouteHandler<GetAlbumFavoritesRoute> = async 
     })
   );
 
+  const links = await db
+    .select({ clientName: clientPeople.clientName, personId: clientPeople.personId })
+    .from(clientPeople)
+    .where(eq(clientPeople.albumId, albumId));
+  const personByClient = new Map(links.map(l => [l.clientName, l.personId]));
+
   return c.json(
     {
       success: true,
       message: "Favorites retrieved successfully",
       data: imagesWithFavoriteData,
       clientNames: uniqueClientNames,
+      clients: uniqueClientNames.map(clientName => ({ clientName, personId: personByClient.get(clientName) ?? null })),
     },
     HttpStatusCodes.OK
   );
@@ -1229,4 +1238,119 @@ export const getAlbumSets: AppRouteHandler<GetAlbumSetsRoute> = async (c) => {
   if (!owned.album) return owned.response;
 
   return c.json({ sets: await loadAlbumSets(c.get('db'), albumId) }, HttpStatusCodes.OK);
+}
+
+// JSON array bound as one parameter, so id lists of any length stay under D1's 100-param limit.
+const jsonIds = (ids: string[]) => sql`(select value from json_each(${JSON.stringify(ids)}))`;
+
+// Replace the album's people. Rows are upserted (not delete+insert) so client_people links to re-sent ids survive.
+export const putAlbumPeople: AppRouteHandler<PutAlbumPeopleRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+
+  const db = c.get('db');
+  const { albumId } = c.req.valid("param");
+  const { people } = c.req.valid("json");
+
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+
+  const [albumImageRows, foreignRows] = await Promise.all([
+    db.select({ id: images.id }).from(images).where(eq(images.albumId, albumId)),
+    // Person ids are global; never let one album's upsert touch another album's person.
+    people.length
+      ? db.select({ id: albumPeople.id }).from(albumPeople)
+          .where(and(sql`${albumPeople.id} in ${jsonIds(people.map(p => p.id))}`, ne(albumPeople.albumId, albumId)))
+      : Promise.resolve([]),
+  ]);
+  const albumImageIds = new Set(albumImageRows.map(r => r.id));
+  const foreign = new Set(foreignRows.map(r => r.id));
+  const kept = people.filter(p => !foreign.has(p.id));
+
+  const now = new Date();
+  const personRows = kept.map(p => ({
+    id: p.id,
+    albumId,
+    name: p.name,
+    position: p.position,
+    coverImageId: p.coverImageId !== null && albumImageIds.has(p.coverImageId) ? p.coverImageId : null,
+    box: p.box ? JSON.stringify(p.box) : null,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  const memberRows = kept.flatMap(p =>
+    [...new Set(p.imageIds)]
+      .filter(id => albumImageIds.has(id))
+      .map(imageId => ({ personId: p.id, imageId }))
+  );
+  const keptIds = kept.map(p => p.id);
+
+  // Dropped people cascade to image_people and null their client links; kept people keep theirs.
+  await db.batch([
+    db.delete(albumPeople).where(and(eq(albumPeople.albumId, albumId), sql`${albumPeople.id} not in ${jsonIds(keptIds)}`)),
+    db.delete(imagePeople).where(inArray(imagePeople.personId,
+      db.select({ id: albumPeople.id }).from(albumPeople).where(eq(albumPeople.albumId, albumId)))),
+    db.update(albums).set({ updatedAt: now }).where(eq(albums.id, albumId)),
+    ...chunk(personRows, 12).map(rows => db.insert(albumPeople).values(rows).onConflictDoUpdate({ // 8 params per row
+      target: albumPeople.id,
+      set: {
+        name: sql`excluded.name`,
+        position: sql`excluded.position`,
+        coverImageId: sql`excluded.cover_image_id`,
+        box: sql`excluded.box`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+    })),
+    ...chunk(memberRows, 50).map(rows => db.insert(imagePeople).values(rows)), // 2 params per row
+  ]);
+
+  return c.json(
+    { success: true, people: personRows.length, memberships: memberRows.length },
+    HttpStatusCodes.OK
+  );
+}
+
+export const getAlbumPeople: AppRouteHandler<GetAlbumPeopleRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+
+  const { albumId } = c.req.valid("param");
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+
+  return c.json({ people: await loadAlbumPeople(c.get('db'), albumId) }, HttpStatusCodes.OK);
+}
+
+export const putClientPerson: AppRouteHandler<PutClientPersonRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+
+  const db = c.get('db');
+  const { albumId } = c.req.valid("param");
+  const { clientName, personId } = c.req.valid("json");
+
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+
+  if (personId === null) {
+    await db.delete(clientPeople).where(and(eq(clientPeople.albumId, albumId), eq(clientPeople.clientName, clientName)));
+    return c.json({ success: true, clientName, personId }, HttpStatusCodes.OK);
+  }
+
+  const [person] = await db.select({ id: albumPeople.id }).from(albumPeople)
+    .where(and(eq(albumPeople.id, personId), eq(albumPeople.albumId, albumId)));
+  if (!person) {
+    return c.json({ success: false, message: "Person not found in this album" }, HttpStatusCodes.BAD_REQUEST);
+  }
+
+  await db.insert(clientPeople).values({ albumId, clientName, personId })
+    .onConflictDoUpdate({ target: [clientPeople.albumId, clientPeople.clientName], set: { personId } });
+
+  return c.json({ success: true, clientName, personId }, HttpStatusCodes.OK);
 }
