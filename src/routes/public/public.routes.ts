@@ -148,6 +148,7 @@ export const getShareManifestRoute = createRoute({
           bc: z.boolean().describe("isBurstCover"),
           m: z.string().nullable().describe("momentId"),
           th: z.string().nullable().describe("thumbhash"),
+          g: z.array(z.string()).nullable().describe("tag slugs"),
         })),
         sets: z.array(z.object({
           id: z.string(),

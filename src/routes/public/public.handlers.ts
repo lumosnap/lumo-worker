@@ -305,6 +305,7 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
       bc: images.isBurstCover,
       m: images.momentId,
       th: images.thumbhash,
+      g: images.tags,
     })
     .from(images)
     .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')))
@@ -336,7 +337,7 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
         browseV2,
       },
       base: album.isSecondaryStorage ? c.env.STORAGE2_PUBLIC_URL_BASE : c.env.STORAGE_PUBLIC_URL_BASE,
-      images: rows.map((img) => ({ ...img, bc: img.bc ?? false })),
+      images: rows.map((img) => ({ ...img, bc: img.bc ?? false, g: img.g ? img.g.split(' ') : null })),
       sets: sets.map((s) => ({ id: s.id, name: s.name, cover: s.coverImageId, ids: s.imageIds })),
     },
     HttpStatusCodes.OK

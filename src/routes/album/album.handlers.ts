@@ -10,6 +10,10 @@ import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 import { getOwnedAlbum } from "@/lib/album-access";
 import { loadAlbumSets } from "@/lib/album-sets";
 
+// Tags are stored space-joined; undefined leaves the column untouched, null or [] clears it.
+const joinTags = (tags: string[] | null | undefined) =>
+  tags === undefined ? undefined : tags?.length ? tags.join(' ') : null;
+
 // Create or get share link
 export const createShareLink: AppRouteHandler<CreateShareLinkRoute> = async (c) => {
   const user = c.get('user');
@@ -622,6 +626,7 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
           phash: img.phash ?? null,
           sharpness: img.sharpness ?? null,
           thumbhash: img.thumbhash ?? null,
+          tags: joinTags(img.tags) ?? null,
         })
         .returning({
           id: images.id,
@@ -819,6 +824,7 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
           phash: img.phash,
           sharpness: img.sharpness,
           thumbhash: img.thumbhash,
+          tags: joinTags(img.tags),
         })
         .where(eq(images.id, img.imageId))
         .returning({
@@ -884,13 +890,14 @@ export const updateImageBrowse: AppRouteHandler<UpdateImageBrowseRoute> = async 
   if (!owned.album) return owned.response;
 
   // Drizzle skips undefined keys; an item with nothing to set would throw, so drop it.
-  const updates = rows.flatMap(({ id, ...fields }) =>
-    Object.values(fields).some(v => v !== undefined)
+  const updates = rows.flatMap(({ id, tags, ...rest }) => {
+    const fields = { ...rest, tags: joinTags(tags) };
+    return Object.values(fields).some(v => v !== undefined)
       ? [db.update(images).set(fields)
           .where(and(eq(images.id, id), eq(images.albumId, albumId)))
           .returning({ id: images.id })]
-      : []
-  );
+      : [];
+  });
 
   // Bump updatedAt so the manifest ETag changes.
   const touchAlbum = db.update(albums).set({ updatedAt: new Date() }).where(eq(albums.id, albumId));

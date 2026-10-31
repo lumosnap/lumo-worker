@@ -46,6 +46,7 @@ export const images = sqliteTable("images", {
     phash: text("phash"), // 16-char hex perceptual hash
     sharpness: real("sharpness"),
     thumbhash: text("thumbhash"), // base64
+    tags: text("tags"), // space-separated tag slugs
     createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 }, (t) => {
     return {

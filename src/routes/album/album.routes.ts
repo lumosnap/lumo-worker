@@ -60,6 +60,7 @@ const browseImageFields = {
   phash: z.string().nullable().optional().describe("16-char hex perceptual hash."),
   sharpness: z.number().nullable().optional(),
   thumbhash: z.string().nullable().optional().describe("Base64 ThumbHash."),
+  tags: z.array(z.string().regex(/^[a-z0-9-]{1,40}$/)).max(12).nullable().optional().describe("Tag slugs; null clears."),
 };
 
 const confirmUploadSchema = z.object({
