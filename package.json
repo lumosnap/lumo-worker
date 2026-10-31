@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "^6.2.0",
-    "@cloudflare/workers-types": "^4.20251014.0",
+    "@cloudflare/workers-types": "^4.20260702.1",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.9.2",
     "cross-env": "^10.1.0",
