@@ -51,6 +51,17 @@ const generateUploadUrlResponseSchema = z.object({
   })).optional()
 })
 
+// Optional browse metadata computed by newer desktop clients; older clients omit it.
+const browseImageFields = {
+  capturedAt: z.number().nullable().optional().describe("Capture time, unix ms."),
+  burstId: z.string().nullable().optional(),
+  isBurstCover: z.boolean().nullable().optional(),
+  momentId: z.string().nullable().optional(),
+  phash: z.string().nullable().optional().describe("16-char hex perceptual hash."),
+  sharpness: z.number().nullable().optional(),
+  thumbhash: z.string().nullable().optional().describe("Base64 ThumbHash."),
+};
+
 const confirmUploadSchema = z.object({
   images: z.array(z.object({
     filename: z.string(),
@@ -62,6 +73,7 @@ const confirmUploadSchema = z.object({
     uploadOrder: z.number(),
     thumbnailB2FileId: z.string().nullable().optional(),
     thumbnailKey: z.string().nullable().optional(),
+    ...browseImageFields,
   }))
 });
 
@@ -85,6 +97,7 @@ const updateImagesSchema = z.object({
     height: z.number(),
     thumbnailB2FileId: z.string().nullable().optional(),
     thumbnailB2FileName: z.string().nullable().optional(),
+    ...browseImageFields,
   }))
 });
 
@@ -97,6 +110,19 @@ const updateImagesResponseSchema = z.object({
     b2FileName: z.string(),
   })).optional()
 })
+
+const updateImageBrowseSchema = z.object({
+  images: z.array(z.object({
+    id: z.number().int().describe("Server image id."),
+    ...browseImageFields,
+  })).min(1).max(1000),
+});
+
+const updateImageBrowseResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  updated: z.number().optional(),
+});
 
 const imageSchema = z.object({
   id: z.number(),
@@ -440,6 +466,41 @@ export const updateImagesRoute = createRoute({
   },
 })
 
+export const updateImageBrowseRoute = createRoute({
+  tags: ["Albums"],
+  method: "patch",
+  summary: "Update image browse metadata",
+  description: "Update browse/analysis fields (capture time, bursts, moments, hashes) on existing images. Never touches stored files.",
+  path: "/albums/:albumId/images/browse",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+    body: jsonContent(
+      updateImageBrowseSchema,
+      "Browse metadata per image",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      updateImageBrowseResponseSchema,
+      "Browse metadata updated",
+    ),
+    [HttpStatusCodes.UNAUTHORIZED]: jsonContent(
+      errorResponseSchema,
+      "User not authenticated",
+    ),
+    [HttpStatusCodes.FORBIDDEN]: jsonContent(
+      errorResponseSchema,
+      "User doesn't own this album",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      errorResponseSchema,
+      "Album not found",
+    ),
+  },
+})
+
 export const getAlbumImagesRoute = createRoute({
   tags: ["Albums"],
   method: "get",
@@ -623,14 +684,77 @@ export const deleteAlbumRoute = createRoute({
   },
 });
 
+const albumSetSchema = z.object({
+  id: z.string().min(1).max(64).describe("Client-generated set id."),
+  name: z.string().min(1).max(120),
+  position: z.number().int(),
+  coverImageId: z.number().int().nullable(),
+  imageIds: z.array(z.number().int()).describe("Server image ids, in display order."),
+});
+
+const putAlbumSetsSchema = z.object({
+  sets: z.array(albumSetSchema).max(200)
+    .refine(sets => new Set(sets.map(s => s.id)).size === sets.length, "Duplicate set id"),
+});
+
+const putAlbumSetsResponseSchema = z.object({
+  success: z.boolean(),
+  sets: z.number(),
+  memberships: z.number(),
+});
+
+const ownerErrorResponses = {
+  [HttpStatusCodes.UNAUTHORIZED]: jsonContent(errorResponseSchema, "User not authenticated"),
+  [HttpStatusCodes.FORBIDDEN]: jsonContent(errorResponseSchema, "User doesn't own this album"),
+  [HttpStatusCodes.NOT_FOUND]: jsonContent(errorResponseSchema, "Album not found"),
+};
+
+export const putAlbumSetsRoute = createRoute({
+  tags: ["Albums"],
+  method: "put",
+  summary: "Replace album sets",
+  description: "Atomically replace all photographer-defined sets of an album. Image ids not in this album are dropped.",
+  path: "/albums/:albumId/sets",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+    body: jsonContent(putAlbumSetsSchema, "The album's complete set structure"),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(putAlbumSetsResponseSchema, "Sets replaced"),
+    ...ownerErrorResponses,
+  },
+})
+
+export const getAlbumSetsRoute = createRoute({
+  tags: ["Albums"],
+  method: "get",
+  summary: "Get album sets",
+  description: "All photographer-defined sets of an album, ordered by position.",
+  path: "/albums/:albumId/sets",
+  request: {
+    params: z.object({
+      albumId: z.string(),
+    }),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.object({ sets: z.array(albumSetSchema) }), "Album sets"),
+    ...ownerErrorResponses,
+  },
+})
+
 export type CreateShareLinkRoute = typeof createShareLinkRoute;
 export type ListAlbumsRoute = typeof listAlbumsRoute;
 export type CreateAlbumRoute = typeof createAlbumRoute;
 export type GenerateUploadUrlRoute = typeof generateUploadUrlRoute;
 export type ConfirmUploadRoute = typeof confirmUploadRoute;
 export type UpdateImagesRoute = typeof updateImagesRoute;
+export type UpdateImageBrowseRoute = typeof updateImageBrowseRoute;
 export type GetAlbumImagesRoute = typeof getAlbumImagesRoute;
 export type DeleteImageRoute = typeof deleteImageRoute;
 export type BulkDeleteImagesRoute = typeof bulkDeleteImagesRoute;
 export type GetAlbumFavoritesRoute = typeof getAlbumFavoritesRoute;
 export type DeleteAlbumRoute = typeof deleteAlbumRoute;
+export type PutAlbumSetsRoute = typeof putAlbumSetsRoute;
+export type GetAlbumSetsRoute = typeof getAlbumSetsRoute;

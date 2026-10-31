@@ -9,10 +9,13 @@ const router = createRouter()
   .openapi(routes.generateUploadUrlRoute, handlers.generateUploadUrl)
   .openapi(routes.confirmUploadRoute, handlers.confirmUpload)
   .openapi(routes.updateImagesRoute, handlers.updateImages)
+  .openapi(routes.updateImageBrowseRoute, handlers.updateImageBrowse)
   .openapi(routes.getAlbumImagesRoute, handlers.getAlbumImages)
   .openapi(routes.deleteImageRoute, handlers.deleteImage)
   .openapi(routes.bulkDeleteImagesRoute, handlers.bulkDeleteImages)
   .openapi(routes.getAlbumFavoritesRoute, handlers.getAlbumFavorites)
-  .openapi(routes.deleteAlbumRoute, handlers.deleteAlbum);
+  .openapi(routes.deleteAlbumRoute, handlers.deleteAlbum)
+  .openapi(routes.putAlbumSetsRoute, handlers.putAlbumSets)
+  .openapi(routes.getAlbumSetsRoute, handlers.getAlbumSets);
 
 export default router;

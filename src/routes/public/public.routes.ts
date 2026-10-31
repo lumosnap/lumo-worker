@@ -86,6 +86,7 @@ export const getAlbumByTokenRoute = createRoute({
             shareLinkToken: z.string().nullable(),
             favoritedPhotosCount: z.number(),
             ownerName: z.string().nullable(),
+            browseV2: z.boolean(),
           }),
           images: z.array(imageSchema),
           pagination: z.object({
@@ -106,6 +107,94 @@ export const getAlbumByTokenRoute = createRoute({
     [HttpStatusCodes.INTERNAL_SERVER_ERROR]: jsonContent(
       errorResponseSchema,
       "Internal server error",
+    ),
+  },
+});
+
+// GET compact album manifest for the browse UI (viewer-independent, cacheable)
+export const getShareManifestRoute = createRoute({
+  tags: ["Public"],
+  method: "get",
+  summary: "Get album manifest by share token",
+  description: "Compact, viewer-independent list of all complete images in upload order. Supports If-None-Match.",
+  path: "/share/:token/manifest",
+  request: {
+    params: z.object({
+      token: z.string(),
+    }),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({
+        v: z.literal(1),
+        album: z.object({
+          id: z.string(),
+          title: z.string(),
+          eventDate: z.string().nullable(),
+          totalImages: z.number(),
+          ownerName: z.string().nullable(),
+          browseV2: z.boolean(),
+        }),
+        base: z.string(),
+        images: z.array(z.object({
+          id: z.number(),
+          f: z.string().describe("b2FileName"),
+          t: z.string().nullable().describe("thumbnailB2FileName"),
+          w: z.number(),
+          h: z.number(),
+          o: z.number().describe("uploadOrder"),
+          c: z.number().nullable().describe("capturedAt, unix ms"),
+          b: z.string().nullable().describe("burstId"),
+          bc: z.boolean().describe("isBurstCover"),
+          m: z.string().nullable().describe("momentId"),
+          th: z.string().nullable().describe("thumbhash"),
+        })),
+        sets: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          cover: z.number().nullable().describe("coverImageId"),
+          ids: z.array(z.number()).describe("image ids in set order"),
+        })).describe("Photographer-defined sets, ordered by position"),
+      }),
+      "Album manifest",
+    ),
+    [HttpStatusCodes.NOT_MODIFIED]: {
+      description: "Manifest unchanged since the given ETag",
+    },
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      errorResponseSchema,
+      "Album not found",
+    ),
+  },
+});
+
+// GET favorites and comments for a client (viewer-specific, uncached)
+export const getShareFeedbackRoute = createRoute({
+  tags: ["Public"],
+  method: "get",
+  summary: "Get feedback for share token",
+  description: "Image IDs favorited by clientName, plus all comments keyed by image ID",
+  path: "/share/:token/feedback",
+  request: {
+    params: z.object({
+      token: z.string(),
+    }),
+    query: z.object({
+      clientName: z.string().optional(),
+    }),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({
+        favorites: z.array(z.number()),
+        counts: z.record(z.string(), z.number()).describe("favorite count per image ID, all clients"),
+        comments: z.record(z.string(), z.array(commentSchema)),
+      }),
+      "Feedback retrieved successfully",
+    ),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(
+      errorResponseSchema,
+      "Album not found",
     ),
   },
 });
@@ -398,6 +487,8 @@ export const createBookingRoute = createRoute({
 });
 
 export type GetAlbumByTokenRoute = typeof getAlbumByTokenRoute;
+export type GetShareManifestRoute = typeof getShareManifestRoute;
+export type GetShareFeedbackRoute = typeof getShareFeedbackRoute;
 export type GetFavoriteImagesRoute = typeof getFavoriteImagesRoute;
 export type CreateFavoriteRoute = typeof createFavoriteRoute;
 export type DeleteFavoriteRoute = typeof deleteFavoriteRoute;

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { sqliteTable, text, integer, index, unique } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index, unique, primaryKey } from 'drizzle-orm/sqlite-core';
 import { user } from './auth';
 
 export const albums = sqliteTable("albums", {
@@ -13,6 +13,7 @@ export const albums = sqliteTable("albums", {
     expiresAt: integer("expires_at", { mode: "timestamp" }),
     isPublic: integer("is_public", { mode: "boolean" }).default(true),
     isSecondaryStorage: integer("is_secondary_storage", { mode: "boolean" }).notNull().default(false),
+    features: text("features"), // JSON feature flags, e.g. {"browseV2":true}
     createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 }, (t) => {
@@ -38,12 +39,20 @@ export const images = sqliteTable("images", {
     thumbnailB2FileId: text("thumbnail_b2_file_id", { length: 255 }),
     thumbnailB2FileName: text("thumbnail_b2_file_name", { length: 500 }),
     uploadStatus: text("upload_status", { length: 20 }).default('pending'), // pgEnum -> text
+    capturedAt: integer("captured_at"), // unix ms (EXIF capture time)
+    burstId: text("burst_id"),
+    isBurstCover: integer("is_burst_cover", { mode: "boolean" }),
+    momentId: text("moment_id"),
+    phash: text("phash"), // 16-char hex perceptual hash
+    sharpness: real("sharpness"),
+    thumbhash: text("thumbhash"), // base64
     createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 }, (t) => {
     return {
         albumIdIdx: index('images_album_id_idx').on(t.albumId),
         sourceImageHashIdx: index('images_source_image_hash_idx').on(t.sourceImageHash),
         uploadOrderIdx: index('images_upload_order_idx').on(t.albumId, t.uploadOrder),
+        capturedAtIdx: index('images_captured_at_idx').on(t.albumId, t.capturedAt),
     }
 });
 
@@ -57,5 +66,31 @@ export const favorites = sqliteTable("favorites", {
 }, (t) => {
     return {
         favoritesUnique: unique('favorites_unique').on(t.albumId, t.imageId, t.clientName),
+    }
+});
+
+// Photographer-defined custom groups. The desktop app owns the structure and replaces it wholesale.
+export const albumSets = sqliteTable("album_sets", {
+    id: text("id").primaryKey(), // client-generated
+    albumId: text("album_id", { length: 25 }).notNull().references(() => albums.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    position: integer("position").notNull().default(0),
+    coverImageId: integer("cover_image_id").references(() => images.id, { onDelete: "set null" }),
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
+}, (t) => {
+    return {
+        albumPositionIdx: index('album_sets_album_position_idx').on(t.albumId, t.position),
+    }
+});
+
+export const setImages = sqliteTable("set_images", {
+    setId: text("set_id").notNull().references(() => albumSets.id, { onDelete: "cascade" }),
+    imageId: integer("image_id").notNull().references(() => images.id, { onDelete: "cascade" }),
+    position: integer("position"),
+}, (t) => {
+    return {
+        pk: primaryKey({ columns: [t.setId, t.imageId] }),
+        imageIdIdx: index('set_images_image_id_idx').on(t.imageId),
     }
 });

@@ -1,13 +1,14 @@
-import { albums, images, favorites } from "@/db/d1-schema/albums";
+import { albums, images, favorites, albumSets, setImages } from "@/db/d1-schema/albums";
 import { subscriptions, plans } from "@/db/d1-schema/billing";
 import { profiles } from "@/db/d1-schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, desc, and, sql, gt } from 'drizzle-orm';
 import * as HttpStatusCodes from "stoker/http-status-codes";
-import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute } from "./album.routes";
+import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, UpdateImageBrowseRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute, PutAlbumSetsRoute, GetAlbumSetsRoute } from "./album.routes";
 import { useBackBlaze } from "@/lib/backblaze";
 import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 import { getOwnedAlbum } from "@/lib/album-access";
+import { loadAlbumSets } from "@/lib/album-sets";
 
 // Create or get share link
 export const createShareLink: AppRouteHandler<CreateShareLinkRoute> = async (c) => {
@@ -614,6 +615,13 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
           thumbnailB2FileId: img.thumbnailB2FileId ?? null,
           thumbnailB2FileName: img.thumbnailKey ?? null,
           uploadStatus: 'complete',
+          capturedAt: img.capturedAt ?? null,
+          burstId: img.burstId ?? null,
+          isBurstCover: img.isBurstCover ?? null,
+          momentId: img.momentId ?? null,
+          phash: img.phash ?? null,
+          sharpness: img.sharpness ?? null,
+          thumbhash: img.thumbhash ?? null,
         })
         .returning({
           id: images.id,
@@ -803,6 +811,14 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
           height: img.height,
           thumbnailB2FileId: img.thumbnailB2FileId,
           thumbnailB2FileName: img.thumbnailB2FileName,
+          // undefined keys are skipped by drizzle, so omitted fields stay untouched
+          capturedAt: img.capturedAt,
+          burstId: img.burstId,
+          isBurstCover: img.isBurstCover,
+          momentId: img.momentId,
+          phash: img.phash,
+          sharpness: img.sharpness,
+          thumbhash: img.thumbhash,
         })
         .where(eq(images.id, img.imageId))
         .returning({
@@ -849,6 +865,40 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
       message: "Images updated successfully",
       data: responseData,
     },
+    HttpStatusCodes.OK
+  );
+}
+
+// Update browse/analysis metadata only. Unlike updateImages this never touches storage.
+export const updateImageBrowse: AppRouteHandler<UpdateImageBrowseRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+
+  const db = c.get('db');
+  const { albumId } = c.req.valid("param");
+  const { images: rows } = c.req.valid("json");
+
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+
+  // Drizzle skips undefined keys; an item with nothing to set would throw, so drop it.
+  const updates = rows.flatMap(({ id, ...fields }) =>
+    Object.values(fields).some(v => v !== undefined)
+      ? [db.update(images).set(fields)
+          .where(and(eq(images.id, id), eq(images.albumId, albumId)))
+          .returning({ id: images.id })]
+      : []
+  );
+
+  // Bump updatedAt so the manifest ETag changes.
+  const touchAlbum = db.update(albums).set({ updatedAt: new Date() }).where(eq(albums.id, albumId));
+  const results = await db.batch([touchAlbum, ...updates]);
+  const updated = results.slice(1).reduce((n, r) => n + (r as unknown[]).length, 0);
+
+  return c.json(
+    { success: true, message: `Updated ${updated} images`, updated },
     HttpStatusCodes.OK
   );
 }
@@ -1107,3 +1157,69 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
     HttpStatusCodes.OK
   );
 };
+
+// D1 caps bound parameters at 100 per statement.
+const chunk = <T,>(rows: T[], size: number): T[][] =>
+  Array.from({ length: Math.ceil(rows.length / size) }, (_, i) => rows.slice(i * size, (i + 1) * size));
+
+// Replace the album's sets wholesale. The desktop app is the source of truth.
+export const putAlbumSets: AppRouteHandler<PutAlbumSetsRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+
+  const db = c.get('db');
+  const { albumId } = c.req.valid("param");
+  const { sets } = c.req.valid("json");
+
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+
+  // Only this album's images may be referenced (cover or member).
+  const albumImageIds = new Set(
+    (await db.select({ id: images.id }).from(images).where(eq(images.albumId, albumId))).map(r => r.id)
+  );
+
+  const now = new Date();
+  const setRows = sets.map(s => ({
+    id: s.id,
+    albumId,
+    name: s.name,
+    position: s.position,
+    coverImageId: s.coverImageId !== null && albumImageIds.has(s.coverImageId) ? s.coverImageId : null,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  const memberRows = sets.flatMap(s =>
+    [...new Set(s.imageIds)]
+      .filter(id => albumImageIds.has(id))
+      .map((imageId, position) => ({ setId: s.id, imageId, position }))
+  );
+
+  // Deleting the sets cascades to their memberships. Bump updatedAt so the manifest ETag changes.
+  await db.batch([
+    db.delete(albumSets).where(eq(albumSets.albumId, albumId)),
+    db.update(albums).set({ updatedAt: now }).where(eq(albums.id, albumId)),
+    ...chunk(setRows, 14).map(rows => db.insert(albumSets).values(rows)), // 7 params per row
+    ...chunk(memberRows, 33).map(rows => db.insert(setImages).values(rows)), // 3 params per row
+  ]);
+
+  return c.json(
+    { success: true, sets: setRows.length, memberships: memberRows.length },
+    HttpStatusCodes.OK
+  );
+}
+
+export const getAlbumSets: AppRouteHandler<GetAlbumSetsRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+
+  const { albumId } = c.req.valid("param");
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+
+  return c.json({ sets: await loadAlbumSets(c.get('db'), albumId) }, HttpStatusCodes.OK);
+}
