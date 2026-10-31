@@ -4,6 +4,9 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 tsconfig = "tsconfig.json"
 
+[dev]
+port = 8787
+
 [observability]
 enabled = false
 head_sampling_rate = 1

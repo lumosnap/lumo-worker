@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin, bearer, deviceAuthorization } from "better-auth/plugins";
 import type { DeviceAuthorizationOptions } from "better-auth/plugins";
+import { defaultRoles, adminAc } from "better-auth/plugins/admin/access";
 import type { Environment } from "@/env";
 import { profiles } from "@/db/d1-schema/profiles";
 import { subscriptions, plans } from "@/db/d1-schema/billing";
@@ -57,6 +58,8 @@ export function createAuth(db: DrizzleD1Database<typeof schema>, env: Environmen
     },
     plugins: [
       admin({
+        // better-auth requires every admin role to be declared in `roles`
+        roles: { ...defaultRoles, superadmin: adminAc, staff: adminAc },
         adminRoles: ["superadmin", "admin", "staff"], // superadmin, admin, and staff have admin-level permissions
       }),
       bearer(),
