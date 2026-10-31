@@ -12,6 +12,8 @@ const router = createRouter()
   .openapi(routes.updateNotesRoute, handlers.updateNotes)
   .openapi(routes.getPhotographerDetailsRoute, handlers.getPhotographerDetails)
   .openapi(routes.createBookingRoute, handlers.createBooking)
-  .openapi(routes.batchFavoritesRoute, handlers.batchFavorites);
+  .openapi(routes.batchFavoritesRoute, handlers.batchFavorites)
+  .openapi(routes.putListPicksRoute, handlers.putListPicks)
+  .openapi(routes.submitListRoute, handlers.submitList);
 
 export default router;

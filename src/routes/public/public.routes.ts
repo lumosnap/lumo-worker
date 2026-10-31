@@ -163,6 +163,13 @@ export const getShareManifestRoute = createRoute({
           box: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable().describe("face box on cover, normalized [x,y,w,h]"),
           ids: z.array(z.number()).describe("image ids"),
         })).describe("Recognized people, ordered by position"),
+        lists: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          maxPicks: z.number().nullable(),
+          deadline: z.number().nullable().describe("unix ms"),
+          setLimits: z.array(z.object({ setId: z.string(), max: z.number() })).nullable(),
+        })).describe("Selection lists, ordered by position"),
       }),
       "Album manifest",
     ),
@@ -197,6 +204,10 @@ export const getShareFeedbackRoute = createRoute({
         favorites: z.array(z.number()),
         counts: z.record(z.string(), z.number()).describe("favorite count per image ID, all clients"),
         comments: z.record(z.string(), z.array(commentSchema)),
+        lists: z.record(z.string(), z.object({
+          imageIds: z.array(z.number()),
+          submittedAt: z.number().nullable().describe("unix ms"),
+        })).describe("clientName's picks per selection list id"),
       }),
       "Feedback retrieved successfully",
     ),
@@ -403,6 +414,54 @@ export const batchFavoritesRoute = createRoute({
   },
 });
 
+const clientNameSchema = z.string().min(1).max(255);
+const listParams = z.object({ token: z.string(), listId: z.string() });
+const lockedSchema = z.object({ error: z.literal('locked') });
+
+export const putListPicksRoute = createRoute({
+  tags: ["Public"],
+  method: "post",
+  summary: "Change a client's picks in a selection list",
+  description: "Applies removes then adds atomically. Rejected whole if the result breaks maxPicks or a set limit. Image ids not in the album are ignored.",
+  path: "/share/:token/lists/:listId/picks",
+  request: {
+    params: listParams,
+    body: jsonContent(
+      z.object({
+        clientName: clientNameSchema,
+        add: z.array(z.number().int()).max(500),
+        remove: z.array(z.number().int()).max(500),
+      }),
+      "Pick changes",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.object({ imageIds: z.array(z.number()) }), "The client's full pick list"),
+    [HttpStatusCodes.CONFLICT]: jsonContent(
+      z.object({ error: z.literal('limit'), maxPicks: z.number().nullable(), setId: z.string().optional(), max: z.number().optional() }),
+      "Result would exceed a limit",
+    ),
+    [HttpStatusCodes.LOCKED]: jsonContent(lockedSchema, "Submitted or past the deadline"),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(errorResponseSchema, "Album or list not found"),
+  },
+});
+
+export const submitListRoute = createRoute({
+  tags: ["Public"],
+  method: "post",
+  summary: "Submit a client's selection list",
+  description: "Locks the client's picks for this list. Idempotent; allowed after the deadline.",
+  path: "/share/:token/lists/:listId/submit",
+  request: {
+    params: listParams,
+    body: jsonContent(z.object({ clientName: clientNameSchema }), "Submitting client"),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.object({ submittedAt: z.number().describe("unix ms") }), "Submitted"),
+    [HttpStatusCodes.NOT_FOUND]: jsonContent(errorResponseSchema, "Album or list not found"),
+  },
+});
+
 // Photographer details schema
 const photographerDetailsSchema = z.object({
   id: z.string(),
@@ -504,3 +563,5 @@ export type UpdateNotesRoute = typeof updateNotesRoute;
 export type GetPhotographerDetailsRoute = typeof getPhotographerDetailsRoute;
 export type CreateBookingRoute = typeof createBookingRoute;
 export type BatchFavoritesRoute = typeof batchFavoritesRoute;
+export type PutListPicksRoute = typeof putListPicksRoute;
+export type SubmitListRoute = typeof submitListRoute;

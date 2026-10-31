@@ -19,6 +19,9 @@ const router = createRouter()
   .openapi(routes.getAlbumSetsRoute, handlers.getAlbumSets)
   .openapi(routes.putAlbumPeopleRoute, handlers.putAlbumPeople)
   .openapi(routes.getAlbumPeopleRoute, handlers.getAlbumPeople)
-  .openapi(routes.putClientPersonRoute, handlers.putClientPerson);
+  .openapi(routes.putClientPersonRoute, handlers.putClientPerson)
+  .openapi(routes.putAlbumListsRoute, handlers.putAlbumLists)
+  .openapi(routes.getAlbumListsRoute, handlers.getAlbumLists)
+  .openapi(routes.deleteListSubmissionRoute, handlers.deleteListSubmission);
 
 export default router;

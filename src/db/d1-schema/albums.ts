@@ -132,3 +132,42 @@ export const clientPeople = sqliteTable("client_people", {
         pk: primaryKey({ columns: [t.albumId, t.clientName] }),
     }
 });
+
+// Client selection lists ("pick 40 for the album"). The desktop app owns the definitions; rows are upserted so picks survive a re-sync.
+export const selectionLists = sqliteTable("selection_lists", {
+    id: text("id").primaryKey(), // client-generated
+    albumId: text("album_id", { length: 25 }).notNull().references(() => albums.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    position: integer("position").notNull().default(0),
+    maxPicks: integer("max_picks"),
+    deadline: integer("deadline"), // unix ms
+    setLimits: text("set_limits"), // JSON [{setId, max}]
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
+}, (t) => {
+    return {
+        albumPositionIdx: index('selection_lists_album_position_idx').on(t.albumId, t.position),
+    }
+});
+
+export const listPicks = sqliteTable("list_picks", {
+    listId: text("list_id").notNull().references(() => selectionLists.id, { onDelete: "cascade" }),
+    imageId: integer("image_id").notNull().references(() => images.id, { onDelete: "cascade" }),
+    clientName: text("client_name").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
+}, (t) => {
+    return {
+        pk: primaryKey({ columns: [t.listId, t.imageId, t.clientName] }),
+        listClientIdx: index('list_picks_list_client_idx').on(t.listId, t.clientName),
+    }
+});
+
+export const listSubmissions = sqliteTable("list_submissions", {
+    listId: text("list_id").notNull().references(() => selectionLists.id, { onDelete: "cascade" }),
+    clientName: text("client_name").notNull(),
+    submittedAt: integer("submitted_at").notNull(), // unix ms
+}, (t) => {
+    return {
+        pk: primaryKey({ columns: [t.listId, t.clientName] }),
+    }
+});

@@ -1,15 +1,16 @@
-import { albums, images, favorites, albumSets, setImages, albumPeople, imagePeople, clientPeople } from "@/db/d1-schema/albums";
+import { albums, images, favorites, albumSets, setImages, albumPeople, imagePeople, clientPeople, selectionLists, listSubmissions } from "@/db/d1-schema/albums";
 import { subscriptions, plans } from "@/db/d1-schema/billing";
 import { profiles } from "@/db/d1-schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, desc, and, sql, gt, inArray, ne } from 'drizzle-orm';
 import * as HttpStatusCodes from "stoker/http-status-codes";
-import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, UpdateImageBrowseRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute, PutAlbumSetsRoute, GetAlbumSetsRoute, PutAlbumPeopleRoute, GetAlbumPeopleRoute, PutClientPersonRoute } from "./album.routes";
+import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, UpdateImageBrowseRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute, PutAlbumSetsRoute, GetAlbumSetsRoute, PutAlbumPeopleRoute, GetAlbumPeopleRoute, PutClientPersonRoute, PutAlbumListsRoute, GetAlbumListsRoute, DeleteListSubmissionRoute } from "./album.routes";
 import { useBackBlaze } from "@/lib/backblaze";
 import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 import { getOwnedAlbum } from "@/lib/album-access";
 import { loadAlbumSets } from "@/lib/album-sets";
 import { loadAlbumPeople } from "@/lib/album-people";
+import { loadAlbumLists, loadListActivity } from "@/lib/album-lists";
 
 // Tags are stored space-joined; undefined leaves the column untouched, null or [] clears it.
 const joinTags = (tags: string[] | null | undefined) =>
@@ -1353,4 +1354,97 @@ export const putClientPerson: AppRouteHandler<PutClientPersonRoute> = async (c) 
     .onConflictDoUpdate({ target: [clientPeople.albumId, clientPeople.clientName], set: { personId } });
 
   return c.json({ success: true, clientName, personId }, HttpStatusCodes.OK);
+}
+
+// Replace the album's selection lists. Upserted so re-sent ids keep their picks and submissions.
+export const putAlbumLists: AppRouteHandler<PutAlbumListsRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+
+  const db = c.get('db');
+  const { albumId } = c.req.valid("param");
+  const { lists } = c.req.valid("json");
+
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+
+  // List ids are global; never let one album's upsert touch another album's list.
+  const foreign = new Set(lists.length
+    ? (await db.select({ id: selectionLists.id }).from(selectionLists)
+        .where(and(sql`${selectionLists.id} in ${jsonIds(lists.map(l => l.id))}`, ne(selectionLists.albumId, albumId)))).map(r => r.id)
+    : []);
+  const kept = lists.filter(l => !foreign.has(l.id));
+
+  const now = new Date();
+  const rows = kept.map(l => ({
+    id: l.id,
+    albumId,
+    name: l.name,
+    position: l.position,
+    maxPicks: l.maxPicks,
+    deadline: l.deadline,
+    setLimits: l.setLimits?.length ? JSON.stringify(l.setLimits) : null,
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  // Dropped lists cascade to their picks and submissions. Bump updatedAt so the manifest ETag changes.
+  await db.batch([
+    db.delete(selectionLists).where(and(eq(selectionLists.albumId, albumId), sql`${selectionLists.id} not in ${jsonIds(kept.map(l => l.id))}`)),
+    db.update(albums).set({ updatedAt: now }).where(eq(albums.id, albumId)),
+    ...chunk(rows, 11).map(r => db.insert(selectionLists).values(r).onConflictDoUpdate({ // 9 params per row
+      target: selectionLists.id,
+      set: {
+        name: sql`excluded.name`,
+        position: sql`excluded.position`,
+        maxPicks: sql`excluded.max_picks`,
+        deadline: sql`excluded.deadline`,
+        setLimits: sql`excluded.set_limits`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+    })),
+  ]);
+
+  return c.json({ success: true, lists: rows.length }, HttpStatusCodes.OK);
+}
+
+export const getAlbumLists: AppRouteHandler<GetAlbumListsRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+
+  const db = c.get('db');
+  const { albumId } = c.req.valid("param");
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+
+  const [lists, activity] = await Promise.all([loadAlbumLists(db, albumId), loadListActivity(db, albumId)]);
+  return c.json({
+    lists: lists.map(l => ({
+      ...l,
+      clients: [...(activity.get(l.id) ?? new Map()).entries()].map(([clientName, a]) => ({ clientName, ...a })),
+    })),
+  }, HttpStatusCodes.OK);
+}
+
+export const deleteListSubmission: AppRouteHandler<DeleteListSubmissionRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+
+  const db = c.get('db');
+  const { albumId, listId, clientName } = c.req.valid("param");
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+
+  await db.delete(listSubmissions).where(and(
+    eq(listSubmissions.listId, listId),
+    eq(listSubmissions.clientName, clientName),
+    inArray(listSubmissions.listId, db.select({ id: selectionLists.id }).from(selectionLists).where(eq(selectionLists.albumId, albumId))),
+  ));
+  return c.json({ success: true }, HttpStatusCodes.OK);
 }
