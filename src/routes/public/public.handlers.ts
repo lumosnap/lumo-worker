@@ -296,6 +296,9 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
       isSecondaryStorage: albums.isSecondaryStorage,
       features: albums.features,
       updatedAt: albums.updatedAt,
+      vectorsKey: albums.vectorsKey,
+      vectorsCount: albums.vectorsCount,
+      vectorsModel: albums.vectorsModel,
     })
     .from(albums)
     .where(eq(albums.shareLinkToken, token));
@@ -335,7 +338,11 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
   const maxId = rows.reduce((max, img) => Math.max(max, img.id), 0);
   const browseV2 = isBrowseV2(album.features);
   const manifestLists = lists.map((l) => ({ id: l.id, name: l.name, maxPicks: l.maxPicks, deadline: l.deadline, setLimits: l.setLimits }));
-  const etag = `W/"${album.updatedAt.getTime()}-${rows.length}-${maxId}-${browseV2 ? 1 : 0}-${hash32(JSON.stringify(manifestLists))}"`;
+  const base = album.isSecondaryStorage ? c.env.STORAGE2_PUBLIC_URL_BASE : c.env.STORAGE_PUBLIC_URL_BASE;
+  const vectors = album.vectorsKey
+    ? { url: `${base}/${album.vectorsKey}`, count: album.vectorsCount ?? 0, model: album.vectorsModel ?? '' }
+    : null;
+  const etag = `W/"${album.updatedAt.getTime()}-${rows.length}-${maxId}-${browseV2 ? 1 : 0}-${hash32(JSON.stringify([manifestLists, vectors]))}"`;
 
   c.header('ETag', etag);
   c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
@@ -355,11 +362,12 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
         ownerName,
         browseV2,
       },
-      base: album.isSecondaryStorage ? c.env.STORAGE2_PUBLIC_URL_BASE : c.env.STORAGE_PUBLIC_URL_BASE,
+      base,
       images: rows.map((img) => ({ ...img, bc: img.bc ?? false, g: img.g ? img.g.split(' ') : null })),
       sets: sets.map((s) => ({ id: s.id, name: s.name, cover: s.coverImageId, ids: s.imageIds })),
       people: people.map((p) => ({ id: p.id, name: p.name, cover: p.coverImageId, box: p.box, ids: p.imageIds })),
       lists: manifestLists,
+      vectors,
     },
     HttpStatusCodes.OK
   );

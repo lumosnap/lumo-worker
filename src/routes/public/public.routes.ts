@@ -170,6 +170,11 @@ export const getShareManifestRoute = createRoute({
           deadline: z.number().nullable().describe("unix ms"),
           setLimits: z.array(z.object({ setId: z.string(), max: z.number() })).nullable(),
         })).describe("Selection lists, ordered by position"),
+        vectors: z.object({
+          url: z.string(),
+          count: z.number(),
+          model: z.string(),
+        }).nullable().describe("Album vector file (LSV1), immutable at its URL"),
       }),
       "Album manifest",
     ),

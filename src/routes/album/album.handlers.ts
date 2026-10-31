@@ -4,7 +4,7 @@ import { profiles } from "@/db/d1-schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
 import { eq, desc, and, sql, gt, inArray, ne } from 'drizzle-orm';
 import * as HttpStatusCodes from "stoker/http-status-codes";
-import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, UpdateImageBrowseRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute, PutAlbumSetsRoute, GetAlbumSetsRoute, PutAlbumPeopleRoute, GetAlbumPeopleRoute, PutClientPersonRoute, PutAlbumListsRoute, GetAlbumListsRoute, DeleteListSubmissionRoute } from "./album.routes";
+import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, UpdateImageBrowseRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute, PutAlbumSetsRoute, GetAlbumSetsRoute, PutAlbumPeopleRoute, GetAlbumPeopleRoute, PutClientPersonRoute, PutAlbumListsRoute, GetAlbumListsRoute, DeleteListSubmissionRoute, VectorsUploadUrlRoute, PutAlbumVectorsRoute, DeleteAlbumVectorsRoute } from "./album.routes";
 import { useBackBlaze } from "@/lib/backblaze";
 import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 import { getOwnedAlbum } from "@/lib/album-access";
@@ -183,6 +183,7 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
 
   // Collect all file names to delete
   const fileNamesToDelete: string[] = [];
+  if (album.vectorsKey) fileNamesToDelete.push(album.vectorsKey);
   for (const image of albumImages) {
     if (image.b2FileName) fileNamesToDelete.push(image.b2FileName);
     if (image.thumbnailB2FileName) fileNamesToDelete.push(image.thumbnailB2FileName);
@@ -1446,5 +1447,79 @@ export const deleteListSubmission: AppRouteHandler<DeleteListSubmissionRoute> = 
     eq(listSubmissions.clientName, clientName),
     inArray(listSubmissions.listId, db.select({ id: selectionLists.id }).from(selectionLists).where(eq(selectionLists.albumId, albumId))),
   ));
+  return c.json({ success: true }, HttpStatusCodes.OK);
+}
+
+// Album vector file (LSV1). Content-hash named, so a new upload never overwrites the live one.
+export const vectorsUploadUrl: AppRouteHandler<VectorsUploadUrlRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+  const { albumId } = c.req.valid("param");
+  const { hash } = c.req.valid("json");
+
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+
+  // ponytail: size is validated but not enforced on the PUT; a presigned PUT can't cap Content-Length. Use a presigned POST policy if that matters.
+  const { getVectorsUploadUrl } = await useBackBlaze(c.env);
+  return c.json(await getVectorsUploadUrl(albumId, hash, owned.album.isSecondaryStorage), HttpStatusCodes.OK);
+}
+
+// Best effort: a leftover object only costs storage.
+const deleteVectorsObject = async (c: Parameters<AppRouteHandler<PutAlbumVectorsRoute>>[0], key: string, isSecondaryStorage: boolean) => {
+  try {
+    const { deleteFile } = await useBackBlaze(c.env);
+    await deleteFile(key, isSecondaryStorage);
+  } catch (error) {
+    c.get("logger").error({ error, key }, "Failed to delete vectors object");
+  }
+}
+
+export const putAlbumVectors: AppRouteHandler<PutAlbumVectorsRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+  const db = c.get('db');
+  const { albumId } = c.req.valid("param");
+  const { key, count, model } = c.req.valid("json");
+
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+  const album = owned.album;
+
+  if (!new RegExp(`^${albumId}/vectors/[a-f0-9]{16,64}\\.bin$`).test(key)) {
+    return c.json({ success: false, message: "Key isn't this album's vector file" }, HttpStatusCodes.BAD_REQUEST);
+  }
+
+  await db.update(albums)
+    .set({ vectorsKey: key, vectorsCount: count, vectorsModel: model, updatedAt: new Date() })
+    .where(eq(albums.id, albumId));
+
+  if (album.vectorsKey && album.vectorsKey !== key) {
+    await deleteVectorsObject(c, album.vectorsKey, album.isSecondaryStorage);
+  }
+  return c.json({ success: true }, HttpStatusCodes.OK);
+}
+
+export const deleteAlbumVectors: AppRouteHandler<DeleteAlbumVectorsRoute> = async (c) => {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+  }
+  const db = c.get('db');
+  const { albumId } = c.req.valid("param");
+
+  const owned = await getOwnedAlbum(c, albumId, user.id);
+  if (!owned.album) return owned.response;
+  const album = owned.album;
+
+  await db.update(albums)
+    .set({ vectorsKey: null, vectorsCount: null, vectorsModel: null, updatedAt: new Date() })
+    .where(eq(albums.id, albumId));
+
+  if (album.vectorsKey) await deleteVectorsObject(c, album.vectorsKey, album.isSecondaryStorage);
   return c.json({ success: true }, HttpStatusCodes.OK);
 }

@@ -22,6 +22,9 @@ const router = createRouter()
   .openapi(routes.putClientPersonRoute, handlers.putClientPerson)
   .openapi(routes.putAlbumListsRoute, handlers.putAlbumLists)
   .openapi(routes.getAlbumListsRoute, handlers.getAlbumLists)
-  .openapi(routes.deleteListSubmissionRoute, handlers.deleteListSubmission);
+  .openapi(routes.deleteListSubmissionRoute, handlers.deleteListSubmission)
+  .openapi(routes.vectorsUploadUrlRoute, handlers.vectorsUploadUrl)
+  .openapi(routes.putAlbumVectorsRoute, handlers.putAlbumVectors)
+  .openapi(routes.deleteAlbumVectorsRoute, handlers.deleteAlbumVectors);
 
 export default router;

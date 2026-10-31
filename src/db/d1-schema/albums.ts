@@ -14,6 +14,9 @@ export const albums = sqliteTable("albums", {
     isPublic: integer("is_public", { mode: "boolean" }).default(true),
     isSecondaryStorage: integer("is_secondary_storage", { mode: "boolean" }).notNull().default(false),
     features: text("features"), // JSON feature flags, e.g. {"browseV2":true}
+    vectorsKey: text("vectors_key"), // storage key of the album vector file (LSV1)
+    vectorsCount: integer("vectors_count"),
+    vectorsModel: text("vectors_model"),
     createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 }, (t) => {

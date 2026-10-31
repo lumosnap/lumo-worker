@@ -901,6 +901,69 @@ export const deleteListSubmissionRoute = createRoute({
   },
 })
 
+export const vectorsUploadUrlRoute = createRoute({
+  tags: ["Albums"],
+  method: "post",
+  summary: "Get an upload URL for the album vector file",
+  description: "Presigned PUT for `{albumId}/vectors/{hash}.bin`. Send exactly the returned headers with the PUT, then record it with PUT /albums/:albumId/vectors.",
+  path: "/albums/:albumId/vectors/upload-url",
+  request: {
+    params: z.object({ albumId: z.string() }),
+    body: jsonContent(
+      z.object({
+        hash: z.string().regex(/^[a-f0-9]{16,64}$/).describe("Content hash, lowercase hex"),
+        size: z.number().int().min(1).max(64 * 1024 * 1024).describe("Bytes"),
+      }),
+      "Vector file to upload",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(
+      z.object({ url: z.string(), key: z.string(), headers: z.record(z.string(), z.string()) }),
+      "Presigned upload",
+    ),
+    ...ownerErrorResponses,
+  },
+})
+
+export const putAlbumVectorsRoute = createRoute({
+  tags: ["Albums"],
+  method: "put",
+  summary: "Record the album vector file",
+  description: "Point the album at an uploaded vector file. The previous file is deleted from storage.",
+  path: "/albums/:albumId/vectors",
+  request: {
+    params: z.object({ albumId: z.string() }),
+    body: jsonContent(
+      z.object({
+        key: z.string().max(200),
+        count: z.number().int().min(0),
+        model: z.string().min(1).max(32),
+      }),
+      "Uploaded vector file",
+    ),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.object({ success: z.boolean() }), "Recorded"),
+    [HttpStatusCodes.BAD_REQUEST]: jsonContent(errorResponseSchema, "Key isn't this album's vector file"),
+    ...ownerErrorResponses,
+  },
+})
+
+export const deleteAlbumVectorsRoute = createRoute({
+  tags: ["Albums"],
+  method: "delete",
+  summary: "Clear the album vector file",
+  path: "/albums/:albumId/vectors",
+  request: {
+    params: z.object({ albumId: z.string() }),
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.object({ success: z.boolean() }), "Cleared"),
+    ...ownerErrorResponses,
+  },
+})
+
 export type CreateShareLinkRoute = typeof createShareLinkRoute;
 export type ListAlbumsRoute = typeof listAlbumsRoute;
 export type CreateAlbumRoute = typeof createAlbumRoute;
@@ -921,3 +984,6 @@ export type PutClientPersonRoute = typeof putClientPersonRoute;
 export type PutAlbumListsRoute = typeof putAlbumListsRoute;
 export type GetAlbumListsRoute = typeof getAlbumListsRoute;
 export type DeleteListSubmissionRoute = typeof deleteListSubmissionRoute;
+export type VectorsUploadUrlRoute = typeof vectorsUploadUrlRoute;
+export type PutAlbumVectorsRoute = typeof putAlbumVectorsRoute;
+export type DeleteAlbumVectorsRoute = typeof deleteAlbumVectorsRoute;

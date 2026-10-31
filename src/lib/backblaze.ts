@@ -81,6 +81,31 @@ export const useBackBlaze = async (env: Environment) => {
     return uploadUrls;
   };
 
+  // Album vector file: content-hash named, so it can be cached forever.
+  // Cache-Control and x-amz-acl are signed headers: the PUT must send exactly these.
+  const getVectorsUploadUrl = async (albumId: string, hash: string, isSecondaryStorage: boolean = false) => {
+    const config = getStorageConfig(isSecondaryStorage);
+    const key = `${albumId}/vectors/${hash}.bin`;
+    const headers = {
+      'Content-Type': 'application/octet-stream',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'x-amz-acl': 'public-read',
+    };
+    const command = new PutObjectCommand({
+      Bucket: config.bucketName,
+      Key: key,
+      ACL: 'public-read',
+      ContentType: headers['Content-Type'],
+      CacheControl: headers['Cache-Control'],
+    });
+    const url = await getSignedUrl(config.s3Client, command, {
+      expiresIn: 3600,
+      signableHeaders: new Set(['content-type', 'cache-control']),
+      unhoistableHeaders: new Set(['x-amz-acl']),
+    });
+    return { url, key, headers };
+  };
+
   const getPublicUrl = (key: string, isSecondaryStorage: boolean = false) => {
     const config = getStorageConfig(isSecondaryStorage);
     // publicUrlBase already includes the bucket path segment where the provider
@@ -99,6 +124,7 @@ export const useBackBlaze = async (env: Environment) => {
 
   return {
     getSignedUrls,
+    getVectorsUploadUrl,
     getPublicUrl,
     deleteFile,
   };
