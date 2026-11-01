@@ -21,15 +21,6 @@ import type {
   BatchFavoritesRoute
 } from "./public.routes";
 
-const isBrowseV2 = (features: string | null): boolean => {
-  if (!features) return false;
-  try {
-    return JSON.parse(features)?.browseV2 === true;
-  } catch {
-    return false;
-  }
-};
-
 // Owner display name for share pages: businessName, else user name
 const getOwnerName = async (db: AppBindings["Variables"]["db"], userId: string): Promise<string | null> => {
   const [profile] = await db
@@ -72,7 +63,6 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
       shareLinkToken: albums.shareLinkToken,
       userId: albums.userId,
       isSecondaryStorage: albums.isSecondaryStorage,
-      features: albums.features,
     })
     .from(albums)
     .where(eq(albums.shareLinkToken, token));
@@ -254,7 +244,6 @@ export const getAlbumByToken: AppRouteHandler<GetAlbumByTokenRoute> = async (c) 
           shareLinkToken: album.shareLinkToken,
           favoritedPhotosCount,
           ownerName,
-          browseV2: isBrowseV2(album.features),
         },
         images: imagesWithFavoriteData,
         pagination,
@@ -277,8 +266,6 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
       totalImages: albums.totalImages,
       userId: albums.userId,
       isSecondaryStorage: albums.isSecondaryStorage,
-      features: albums.features,
-      updatedAt: albums.updatedAt,
       vectorsKey: albums.vectorsKey,
       vectorsCount: albums.vectorsCount,
       vectorsModel: albums.vectorsModel,
@@ -315,43 +302,41 @@ export const getShareManifest: AppRouteHandler<GetShareManifestRoute> = async (c
     .where(and(eq(images.albumId, album.id), eq(images.uploadStatus, 'complete')))
     .orderBy(asc(images.uploadOrder)), getOwnerName(db, album.userId!), loadAlbumSets(db, album.id), loadAlbumPeople(db, album.id)]);
 
-  // Version signal: album.updatedAt is bumped on upload/patch/delete; count + max id cover same-second changes.
-  // ponytail: updatedAt has 1s resolution, so two patches inside one second can share an ETag until max-age expires.
-  // ponytail: ownerName is not in the ETag; a profile rename shows on the next album change. Hash it in if that matters.
-  const maxId = rows.reduce((max, img) => Math.max(max, img.id), 0);
-  const browseV2 = isBrowseV2(album.features);
   const base = album.isSecondaryStorage ? c.env.STORAGE2_PUBLIC_URL_BASE : c.env.STORAGE_PUBLIC_URL_BASE;
   const vectors = album.vectorsKey
     ? { url: `${base}/${album.vectorsKey}`, count: album.vectorsCount ?? 0, model: album.vectorsModel ?? '' }
     : null;
-  const etag = `W/"${album.updatedAt.getTime()}-${rows.length}-${maxId}-${browseV2 ? 1 : 0}"`;
+  const body = JSON.stringify({
+    v: 1,
+    album: {
+      id: album.id,
+      title: album.title,
+      eventDate: album.eventDate,
+      totalImages: album.totalImages,
+      ownerName,
+    },
+    base,
+    images: rows.map((img) => ({ ...img, bc: img.bc ?? false, g: img.g ? img.g.split(' ') : null })),
+    sets: sets.map((s) => ({ id: s.id, name: s.name, cover: s.coverImageId, ids: s.imageIds })),
+    people: people.map((p) => ({ id: p.id, name: p.name, cover: p.coverImageId, box: p.box, ids: p.imageIds })),
+    vectors,
+  });
+
+  // ETag is a hash of the body, so any change shows. no-cache: always revalidate, so a revoked token stops working.
+  // ponytail: a 304 still runs every query to compute the hash; key it on a version column if that load matters.
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(body)));
+  const etag = `W/"${Array.from(hash, b => b.toString(16).padStart(2, '0')).join('')}"`;
 
   c.header('ETag', etag);
-  c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
+  c.header('Cache-Control', 'private, no-cache');
 
-  if (c.req.header('If-None-Match') === etag) {
+  // Weak comparison (RFC 9110 13.1.2): ignore W/, accept a list or *.
+  const ifNoneMatch = c.req.header('If-None-Match');
+  if (ifNoneMatch && ifNoneMatch.split(',').some(t => t.trim() === '*' || t.trim().replace(/^W\//, '') === etag.slice(2))) {
     return c.body(null, HttpStatusCodes.NOT_MODIFIED);
   }
 
-  return c.json(
-    {
-      v: 1 as const,
-      album: {
-        id: album.id,
-        title: album.title,
-        eventDate: album.eventDate,
-        totalImages: album.totalImages,
-        ownerName,
-        browseV2,
-      },
-      base,
-      images: rows.map((img) => ({ ...img, bc: img.bc ?? false, g: img.g ? img.g.split(' ') : null })),
-      sets: sets.map((s) => ({ id: s.id, name: s.name, cover: s.coverImageId, ids: s.imageIds })),
-      people: people.map((p) => ({ id: p.id, name: p.name, cover: p.coverImageId, box: p.box, ids: p.imageIds })),
-      vectors,
-    },
-    HttpStatusCodes.OK
-  );
+  return c.body(body, HttpStatusCodes.OK, { 'Content-Type': 'application/json' });
 };
 
 export const getShareFeedback: AppRouteHandler<GetShareFeedbackRoute> = async (c) => {

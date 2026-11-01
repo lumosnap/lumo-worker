@@ -87,8 +87,8 @@ export default function createApp() {
     },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowHeaders: ['Content-Type', 'Authorization', 'User-Agent', 'Accept', 'Accept-Encoding', 'Accept-Language', 'Referer', 'Origin'],
-    exposeHeaders: ['Set-Cookie'],
+    allowHeaders: ['Content-Type', 'Authorization', 'User-Agent', 'Accept', 'Accept-Encoding', 'Accept-Language', 'Referer', 'Origin', 'If-None-Match'],
+    exposeHeaders: ['Set-Cookie', 'ETag'],
     maxAge: 2592000
   }))
 

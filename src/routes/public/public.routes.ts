@@ -86,7 +86,6 @@ export const getAlbumByTokenRoute = createRoute({
             shareLinkToken: z.string().nullable(),
             favoritedPhotosCount: z.number(),
             ownerName: z.string().nullable(),
-            browseV2: z.boolean(),
           }),
           images: z.array(imageSchema),
           pagination: z.object({
@@ -133,7 +132,6 @@ export const getShareManifestRoute = createRoute({
           eventDate: z.string().nullable(),
           totalImages: z.number(),
           ownerName: z.string().nullable(),
-          browseV2: z.boolean(),
         }),
         base: z.string(),
         images: z.array(z.object({
