@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { sqliteTable, text, integer, real, index, unique, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index, unique, primaryKey, foreignKey } from 'drizzle-orm/sqlite-core';
 import { user } from './auth';
 
 export const albums = sqliteTable("albums", {
@@ -13,10 +13,10 @@ export const albums = sqliteTable("albums", {
     expiresAt: integer("expires_at", { mode: "timestamp" }),
     isPublic: integer("is_public", { mode: "boolean" }).default(true),
     isSecondaryStorage: integer("is_secondary_storage", { mode: "boolean" }).notNull().default(false),
-    features: text("features"), // JSON feature flags, e.g. {"browseV2":true}
     vectorsKey: text("vectors_key"), // storage key of the album vector file (LSV1)
     vectorsCount: integer("vectors_count"),
     vectorsModel: text("vectors_model"),
+    vectorsPrevKey: text("vectors_prev_key"), // previous vector file, kept for share tabs still reading it
     createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 }, (t) => {
@@ -75,8 +75,8 @@ export const favorites = sqliteTable("favorites", {
 
 // Photographer-defined custom groups. The desktop app owns the structure and replaces it wholesale.
 export const albumSets = sqliteTable("album_sets", {
-    id: text("id").primaryKey(), // client-generated
     albumId: text("album_id", { length: 25 }).notNull().references(() => albums.id, { onDelete: "cascade" }),
+    id: text("id").notNull(), // client-generated, unique per album
     name: text("name").notNull(),
     position: integer("position").notNull().default(0),
     coverImageId: integer("cover_image_id").references(() => images.id, { onDelete: "set null" }),
@@ -84,25 +84,28 @@ export const albumSets = sqliteTable("album_sets", {
     updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 }, (t) => {
     return {
+        pk: primaryKey({ columns: [t.albumId, t.id] }),
         albumPositionIdx: index('album_sets_album_position_idx').on(t.albumId, t.position),
     }
 });
 
 export const setImages = sqliteTable("set_images", {
-    setId: text("set_id").notNull().references(() => albumSets.id, { onDelete: "cascade" }),
+    albumId: text("album_id", { length: 25 }).notNull(),
+    setId: text("set_id").notNull(),
     imageId: integer("image_id").notNull().references(() => images.id, { onDelete: "cascade" }),
     position: integer("position"),
 }, (t) => {
     return {
-        pk: primaryKey({ columns: [t.setId, t.imageId] }),
+        pk: primaryKey({ columns: [t.albumId, t.setId, t.imageId] }),
+        setFk: foreignKey({ columns: [t.albumId, t.setId], foreignColumns: [albumSets.albumId, albumSets.id] }).onDelete("cascade"),
         imageIdIdx: index('set_images_image_id_idx').on(t.imageId),
     }
 });
 
 // Recognized faces/people. The desktop app owns them; rows are upserted so client links survive a re-sync.
 export const albumPeople = sqliteTable("album_people", {
-    id: text("id").primaryKey(), // client-generated
     albumId: text("album_id", { length: 25 }).notNull().references(() => albums.id, { onDelete: "cascade" }),
+    id: text("id").notNull(), // client-generated, unique per album
     name: text("name").notNull(),
     position: integer("position").notNull().default(0),
     coverImageId: integer("cover_image_id").references(() => images.id, { onDelete: "set null" }),
@@ -111,16 +114,19 @@ export const albumPeople = sqliteTable("album_people", {
     updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 }, (t) => {
     return {
+        pk: primaryKey({ columns: [t.albumId, t.id] }),
         albumPositionIdx: index('album_people_album_position_idx').on(t.albumId, t.position),
     }
 });
 
 export const imagePeople = sqliteTable("image_people", {
-    personId: text("person_id").notNull().references(() => albumPeople.id, { onDelete: "cascade" }),
+    albumId: text("album_id", { length: 25 }).notNull(),
+    personId: text("person_id").notNull(),
     imageId: integer("image_id").notNull().references(() => images.id, { onDelete: "cascade" }),
 }, (t) => {
     return {
-        pk: primaryKey({ columns: [t.personId, t.imageId] }),
+        pk: primaryKey({ columns: [t.albumId, t.personId, t.imageId] }),
+        personFk: foreignKey({ columns: [t.albumId, t.personId], foreignColumns: [albumPeople.albumId, albumPeople.id] }).onDelete("cascade"),
         imageIdIdx: index('image_people_image_id_idx').on(t.imageId),
     }
 });
@@ -129,9 +135,11 @@ export const imagePeople = sqliteTable("image_people", {
 export const clientPeople = sqliteTable("client_people", {
     albumId: text("album_id", { length: 25 }).notNull().references(() => albums.id, { onDelete: "cascade" }),
     clientName: text("client_name").notNull(),
-    personId: text("person_id").references(() => albumPeople.id, { onDelete: "set null" }),
+    personId: text("person_id"),
 }, (t) => {
     return {
         pk: primaryKey({ columns: [t.albumId, t.clientName] }),
+        // Composite FK can't SET NULL (album_id is NOT NULL), so a dropped person drops the link.
+        personFk: foreignKey({ columns: [t.albumId, t.personId], foreignColumns: [albumPeople.albumId, albumPeople.id] }).onDelete("cascade"),
     }
 });

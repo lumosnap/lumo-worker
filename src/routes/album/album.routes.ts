@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
 import { commentSchema, errorResponseSchema } from "@/lib/openapi-schemas";
+import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 
 
 const albumSchema = z.object({
@@ -53,13 +54,13 @@ const generateUploadUrlResponseSchema = z.object({
 
 // Optional browse metadata computed by newer desktop clients; older clients omit it.
 const browseImageFields = {
-  capturedAt: z.number().nullable().optional().describe("Capture time, unix ms."),
-  burstId: z.string().nullable().optional(),
+  capturedAt: z.number().int().nullable().optional().describe("Capture time, unix ms."),
+  burstId: z.string().max(64).nullable().optional(),
   isBurstCover: z.boolean().nullable().optional(),
-  momentId: z.string().nullable().optional(),
-  phash: z.string().nullable().optional().describe("16-char hex perceptual hash."),
+  momentId: z.string().max(64).nullable().optional(),
+  phash: z.string().max(64).nullable().optional().describe("16-char hex perceptual hash."),
   sharpness: z.number().nullable().optional(),
-  thumbhash: z.string().nullable().optional().describe("Base64 ThumbHash."),
+  thumbhash: z.string().max(64).nullable().optional().describe("Base64 ThumbHash."),
   tags: z.array(z.string().regex(/^[a-z0-9-]{1,40}$/)).max(12).nullable().optional().describe("Tag slugs; null clears."),
 };
 
@@ -694,7 +695,7 @@ const albumSetSchema = z.object({
   name: z.string().min(1).max(120),
   position: z.number().int(),
   coverImageId: z.number().int().nullable(),
-  imageIds: z.array(z.number().int()).describe("Server image ids, in display order."),
+  imageIds: z.array(z.number().int()).max(GLOBAL_MAX_IMAGES).describe("Server image ids, in display order."),
 });
 
 const putAlbumSetsSchema = z.object({
@@ -756,7 +757,7 @@ const albumPersonSchema = z.object({
   coverImageId: z.number().int().nullable(),
   box: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1), z.number().min(0).max(1)])
     .nullable().describe("Face box on the cover image, normalized [x,y,w,h]."),
-  imageIds: z.array(z.number().int()).describe("Server image ids this person appears in."),
+  imageIds: z.array(z.number().int()).max(GLOBAL_MAX_IMAGES).describe("Server image ids this person appears in."),
 });
 
 const putAlbumPeopleSchema = z.object({
@@ -856,7 +857,7 @@ export const putAlbumVectorsRoute = createRoute({
   tags: ["Albums"],
   method: "put",
   summary: "Record the album vector file",
-  description: "Point the album at an uploaded vector file. The previous file is deleted from storage.",
+  description: "Point the album at an uploaded vector file. The replaced file stays readable until the next swap, then is deleted from storage.",
   path: "/albums/:albumId/vectors",
   request: {
     params: z.object({ albumId: z.string() }),
@@ -871,7 +872,8 @@ export const putAlbumVectorsRoute = createRoute({
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(z.object({ success: z.boolean() }), "Recorded"),
-    [HttpStatusCodes.BAD_REQUEST]: jsonContent(errorResponseSchema, "Key isn't this album's vector file"),
+    [HttpStatusCodes.BAD_REQUEST]: jsonContent(errorResponseSchema, "Key isn't this album's vector file, or it wasn't uploaded"),
+    [HttpStatusCodes.CONFLICT]: jsonContent(errorResponseSchema, "Another swap landed meanwhile; re-read and retry"),
     ...ownerErrorResponses,
   },
 })

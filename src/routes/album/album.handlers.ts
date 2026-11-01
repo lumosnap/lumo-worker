@@ -1,8 +1,8 @@
-import { albums, images, favorites, albumSets, setImages, albumPeople, imagePeople, clientPeople } from "@/db/d1-schema/albums";
+import { albums, images, favorites, albumSets, albumPeople, imagePeople, clientPeople } from "@/db/d1-schema/albums";
 import { subscriptions, plans } from "@/db/d1-schema/billing";
 import { profiles } from "@/db/d1-schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
-import { eq, desc, and, sql, gt, inArray, ne } from 'drizzle-orm';
+import { eq, desc, and, sql, gt } from 'drizzle-orm';
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, UpdateImageBrowseRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute, PutAlbumSetsRoute, GetAlbumSetsRoute, PutAlbumPeopleRoute, GetAlbumPeopleRoute, PutClientPersonRoute, VectorsUploadUrlRoute, PutAlbumVectorsRoute, DeleteAlbumVectorsRoute } from "./album.routes";
 import { useBackBlaze } from "@/lib/backblaze";
@@ -183,6 +183,7 @@ export const deleteAlbum: AppRouteHandler<DeleteAlbumRoute> = async (c) => {
   // Collect all file names to delete
   const fileNamesToDelete: string[] = [];
   if (album.vectorsKey) fileNamesToDelete.push(album.vectorsKey);
+  if (album.vectorsPrevKey) fileNamesToDelete.push(album.vectorsPrevKey);
   for (const image of albumImages) {
     if (image.b2FileName) fileNamesToDelete.push(image.b2FileName);
     if (image.thumbnailB2FileName) fileNamesToDelete.push(image.thumbnailB2FileName);
@@ -909,7 +910,6 @@ export const updateImageBrowse: AppRouteHandler<UpdateImageBrowseRoute> = async 
       : [];
   });
 
-  // Bump updatedAt so the manifest ETag changes.
   const touchAlbum = db.update(albums).set({ updatedAt: new Date() }).where(eq(albums.id, albumId));
   const results = await db.batch([touchAlbum, ...updates]);
   const updated = results.slice(1).reduce((n, r) => n + (r as unknown[]).length, 0);
@@ -1175,10 +1175,6 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
   );
 };
 
-// D1 caps bound parameters at 100 per statement.
-const chunk = <T,>(rows: T[], size: number): T[][] =>
-  Array.from({ length: Math.ceil(rows.length / size) }, (_, i) => rows.slice(i * size, (i + 1) * size));
-
 // Replace the album's sets wholesale. The desktop app is the source of truth.
 export const putAlbumSets: AppRouteHandler<PutAlbumSetsRoute> = async (c) => {
   const user = c.get('user');
@@ -1193,37 +1189,26 @@ export const putAlbumSets: AppRouteHandler<PutAlbumSetsRoute> = async (c) => {
   const owned = await getOwnedAlbum(c, albumId, user.id);
   if (!owned.album) return owned.response;
 
-  // Only this album's images may be referenced (cover or member).
-  const albumImageIds = new Set(
-    (await db.select({ id: images.id }).from(images).where(eq(images.albumId, albumId))).map(r => r.id)
-  );
+  // Bound as one JSON parameter. Member position is the index in imageIds, so dropped ids leave harmless gaps.
+  const json = JSON.stringify(sets.map(s => ({ ...s, imageIds: [...new Set(s.imageIds)] })));
 
-  const now = new Date();
-  const setRows = sets.map(s => ({
-    id: s.id,
-    albumId,
-    name: s.name,
-    position: s.position,
-    coverImageId: s.coverImageId !== null && albumImageIds.has(s.coverImageId) ? s.coverImageId : null,
-    createdAt: now,
-    updatedAt: now,
-  }));
-  const memberRows = sets.flatMap(s =>
-    [...new Set(s.imageIds)]
-      .filter(id => albumImageIds.has(id))
-      .map((imageId, position) => ({ setId: s.id, imageId, position }))
-  );
-
-  // Deleting the sets cascades to their memberships. Bump updatedAt so the manifest ETag changes.
-  await db.batch([
+  // Covers and members are checked against this album's images inside the statements, so an image
+  // deleted meanwhile is dropped instead of failing a foreign key. Deleting the sets cascades to their memberships.
+  const [, , , members] = await db.batch([
     db.delete(albumSets).where(eq(albumSets.albumId, albumId)),
-    db.update(albums).set({ updatedAt: now }).where(eq(albums.id, albumId)),
-    ...chunk(setRows, 14).map(rows => db.insert(albumSets).values(rows)), // 7 params per row
-    ...chunk(memberRows, 33).map(rows => db.insert(setImages).values(rows)), // 3 params per row
+    db.update(albums).set({ updatedAt: new Date() }).where(eq(albums.id, albumId)),
+    db.run(sql`insert into album_sets (album_id, id, name, position, cover_image_id)
+      select ${albumId}, s.value ->> 'id', s.value ->> 'name', s.value ->> 'position',
+        (select i.id from images i where i.id = s.value ->> 'coverImageId' and i.album_id = ${albumId})
+      from json_each(${json}) s`),
+    db.run(sql`insert into set_images (album_id, set_id, image_id, position)
+      select ${albumId}, s.value ->> 'id', i.id, m.key
+      from json_each(${json}) s, json_each(s.value, '$.imageIds') m
+      join images i on i.id = m.value and i.album_id = ${albumId}`),
   ]);
 
   return c.json(
-    { success: true, sets: setRows.length, memberships: memberRows.length },
+    { success: true, sets: sets.length, memberships: members.meta.changes },
     HttpStatusCodes.OK
   );
 }
@@ -1258,57 +1243,30 @@ export const putAlbumPeople: AppRouteHandler<PutAlbumPeopleRoute> = async (c) =>
   const owned = await getOwnedAlbum(c, albumId, user.id);
   if (!owned.album) return owned.response;
 
-  const [albumImageRows, foreignRows] = await Promise.all([
-    db.select({ id: images.id }).from(images).where(eq(images.albumId, albumId)),
-    // Person ids are global; never let one album's upsert touch another album's person.
-    people.length
-      ? db.select({ id: albumPeople.id }).from(albumPeople)
-          .where(and(sql`${albumPeople.id} in ${jsonIds(people.map(p => p.id))}`, ne(albumPeople.albumId, albumId)))
-      : Promise.resolve([]),
-  ]);
-  const albumImageIds = new Set(albumImageRows.map(r => r.id));
-  const foreign = new Set(foreignRows.map(r => r.id));
-  const kept = people.filter(p => !foreign.has(p.id));
+  const json = JSON.stringify(people.map(p => ({ ...p, imageIds: [...new Set(p.imageIds)] })));
 
-  const now = new Date();
-  const personRows = kept.map(p => ({
-    id: p.id,
-    albumId,
-    name: p.name,
-    position: p.position,
-    coverImageId: p.coverImageId !== null && albumImageIds.has(p.coverImageId) ? p.coverImageId : null,
-    box: p.box ? JSON.stringify(p.box) : null,
-    createdAt: now,
-    updatedAt: now,
-  }));
-  const memberRows = kept.flatMap(p =>
-    [...new Set(p.imageIds)]
-      .filter(id => albumImageIds.has(id))
-      .map(imageId => ({ personId: p.id, imageId }))
-  );
-  const keptIds = kept.map(p => p.id);
-
-  // Dropped people cascade to image_people and null their client links; kept people keep theirs.
-  await db.batch([
-    db.delete(albumPeople).where(and(eq(albumPeople.albumId, albumId), sql`${albumPeople.id} not in ${jsonIds(keptIds)}`)),
-    db.delete(imagePeople).where(inArray(imagePeople.personId,
-      db.select({ id: albumPeople.id }).from(albumPeople).where(eq(albumPeople.albumId, albumId)))),
-    db.update(albums).set({ updatedAt: now }).where(eq(albums.id, albumId)),
-    ...chunk(personRows, 12).map(rows => db.insert(albumPeople).values(rows).onConflictDoUpdate({ // 8 params per row
-      target: albumPeople.id,
-      set: {
-        name: sql`excluded.name`,
-        position: sql`excluded.position`,
-        coverImageId: sql`excluded.cover_image_id`,
-        box: sql`excluded.box`,
-        updatedAt: sql`excluded.updated_at`,
-      },
-    })),
-    ...chunk(memberRows, 50).map(rows => db.insert(imagePeople).values(rows)), // 2 params per row
+  // Dropped people cascade to image_people and client links; kept people keep theirs.
+  // Covers and members are checked against this album's images inside the statements (see putAlbumSets).
+  // "where true" lets SQLite parse the upsert after a select.
+  const [, , , , members] = await db.batch([
+    db.delete(albumPeople).where(and(eq(albumPeople.albumId, albumId), sql`${albumPeople.id} not in ${jsonIds(people.map(p => p.id))}`)),
+    db.delete(imagePeople).where(eq(imagePeople.albumId, albumId)),
+    db.update(albums).set({ updatedAt: new Date() }).where(eq(albums.id, albumId)),
+    db.run(sql`insert into album_people (album_id, id, name, position, cover_image_id, box)
+      select ${albumId}, p.value ->> 'id', p.value ->> 'name', p.value ->> 'position',
+        (select i.id from images i where i.id = p.value ->> 'coverImageId' and i.album_id = ${albumId}),
+        p.value ->> 'box'
+      from json_each(${json}) p where true
+      on conflict (album_id, id) do update set name = excluded.name, position = excluded.position,
+        cover_image_id = excluded.cover_image_id, box = excluded.box, updated_at = unixepoch()`),
+    db.run(sql`insert into image_people (album_id, person_id, image_id)
+      select ${albumId}, p.value ->> 'id', i.id
+      from json_each(${json}) p, json_each(p.value, '$.imageIds') m
+      join images i on i.id = m.value and i.album_id = ${albumId}`),
   ]);
 
   return c.json(
-    { success: true, people: personRows.length, memberships: memberRows.length },
+    { success: true, people: people.length, memberships: members.meta.changes },
     HttpStatusCodes.OK
   );
 }
@@ -1344,14 +1302,13 @@ export const putClientPerson: AppRouteHandler<PutClientPersonRoute> = async (c) 
     return c.json({ success: true, clientName, personId }, HttpStatusCodes.OK);
   }
 
-  const [person] = await db.select({ id: albumPeople.id }).from(albumPeople)
-    .where(and(eq(albumPeople.id, personId), eq(albumPeople.albumId, albumId)));
-  if (!person) {
+  // One statement, so a people PUT that drops the person can't land between a check and the insert.
+  const linked = await db.run(sql`insert into client_people (album_id, client_name, person_id)
+    select album_id, ${clientName}, id from album_people where album_id = ${albumId} and id = ${personId}
+    on conflict (album_id, client_name) do update set person_id = excluded.person_id`);
+  if (!linked.meta.changes) {
     return c.json({ success: false, message: "Person not found in this album" }, HttpStatusCodes.BAD_REQUEST);
   }
-
-  await db.insert(clientPeople).values({ albumId, clientName, personId })
-    .onConflictDoUpdate({ target: [clientPeople.albumId, clientPeople.clientName], set: { personId } });
 
   return c.json({ success: true, clientName, personId }, HttpStatusCodes.OK);
 }
@@ -1400,13 +1357,30 @@ export const putAlbumVectors: AppRouteHandler<PutAlbumVectorsRoute> = async (c) 
     return c.json({ success: false, message: "Key isn't this album's vector file" }, HttpStatusCodes.BAD_REQUEST);
   }
 
-  await db.update(albums)
-    .set({ vectorsKey: key, vectorsCount: count, vectorsModel: model, updatedAt: new Date() })
-    .where(eq(albums.id, albumId));
-
-  if (album.vectorsKey && album.vectorsKey !== key) {
-    await deleteVectorsObject(c, album.vectorsKey, album.isSecondaryStorage);
+  const { fileExists } = await useBackBlaze(c.env);
+  if (!(await fileExists(key, album.isSecondaryStorage))) {
+    return c.json({ success: false, message: "Vector file not uploaded" }, HttpStatusCodes.BAD_REQUEST);
   }
+
+  // Compare-and-set on the key we read, so concurrent swaps can't both win and delete each other's file.
+  // The replaced file is kept as vectorsPrevKey for share tabs still reading it; the one before that goes.
+  const replaced = album.vectorsKey !== key;
+  const updated = await db.update(albums)
+    .set({
+      vectorsKey: key,
+      vectorsPrevKey: replaced ? album.vectorsKey : album.vectorsPrevKey,
+      vectorsCount: count,
+      vectorsModel: model,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(albums.id, albumId), sql`${albums.vectorsKey} is ${album.vectorsKey}`))
+    .returning({ id: albums.id });
+  if (!updated.length) {
+    return c.json({ success: false, message: "Vector file changed meanwhile, retry" }, HttpStatusCodes.CONFLICT);
+  }
+
+  const dropped = replaced ? album.vectorsPrevKey : null;
+  if (dropped && dropped !== key) await deleteVectorsObject(c, dropped, album.isSecondaryStorage);
   return c.json({ success: true }, HttpStatusCodes.OK);
 }
 
@@ -1423,9 +1397,11 @@ export const deleteAlbumVectors: AppRouteHandler<DeleteAlbumVectorsRoute> = asyn
   const album = owned.album;
 
   await db.update(albums)
-    .set({ vectorsKey: null, vectorsCount: null, vectorsModel: null, updatedAt: new Date() })
+    .set({ vectorsKey: null, vectorsPrevKey: null, vectorsCount: null, vectorsModel: null, updatedAt: new Date() })
     .where(eq(albums.id, albumId));
 
-  if (album.vectorsKey) await deleteVectorsObject(c, album.vectorsKey, album.isSecondaryStorage);
+  for (const key of [album.vectorsKey, album.vectorsPrevKey]) {
+    if (key) await deleteVectorsObject(c, key, album.isSecondaryStorage);
+  }
   return c.json({ success: true }, HttpStatusCodes.OK);
 }

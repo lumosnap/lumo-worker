@@ -1,7 +1,7 @@
 import type { Environment } from "@/env";
 
 export const useBackBlaze = async (env: Environment) => {
-  const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+  const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } = await import('@aws-sdk/client-s3');
   const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
 
   const s3Client = new S3Client({
@@ -122,10 +122,27 @@ export const useBackBlaze = async (env: Environment) => {
     return await config.s3Client.send(command);
   };
 
+  // false when the object doesn't exist; other errors propagate.
+  const fileExists = async (key: string, isSecondaryStorage: boolean = false) => {
+    const config = getStorageConfig(isSecondaryStorage);
+    const command = new HeadObjectCommand({
+      Bucket: config.bucketName,
+      Key: key,
+    });
+    try {
+      await config.s3Client.send(command);
+      return true;
+    } catch (error) {
+      if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return false;
+      throw error;
+    }
+  };
+
   return {
     getSignedUrls,
     getVectorsUploadUrl,
     getPublicUrl,
     deleteFile,
+    fileExists,
   };
 };

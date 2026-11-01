@@ -1,4 +1,3 @@
-ALTER TABLE `albums` ADD `features` text;
 ALTER TABLE `images` ADD `captured_at` integer;
 ALTER TABLE `images` ADD `burst_id` text;
 ALTER TABLE `images` ADD `is_burst_cover` integer;

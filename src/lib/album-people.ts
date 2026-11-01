@@ -24,8 +24,7 @@ export async function loadAlbumPeople(db: AppBindings["Variables"]["db"], albumI
       .orderBy(asc(albumPeople.position)),
     db.select({ personId: imagePeople.personId, imageId: imagePeople.imageId })
       .from(imagePeople)
-      .innerJoin(albumPeople, eq(imagePeople.personId, albumPeople.id))
-      .where(eq(albumPeople.albumId, albumId))
+      .where(eq(imagePeople.albumId, albumId))
       .orderBy(asc(imagePeople.personId), asc(imagePeople.imageId)),
   ]);
 

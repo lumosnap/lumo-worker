@@ -12,8 +12,7 @@ export async function loadAlbumSets(db: AppBindings["Variables"]["db"], albumId:
       .orderBy(asc(albumSets.position)),
     db.select({ setId: setImages.setId, imageId: setImages.imageId })
       .from(setImages)
-      .innerJoin(albumSets, eq(setImages.setId, albumSets.id))
-      .where(eq(albumSets.albumId, albumId))
+      .where(eq(setImages.albumId, albumId))
       .orderBy(asc(setImages.setId), asc(setImages.position)),
   ]);
 
