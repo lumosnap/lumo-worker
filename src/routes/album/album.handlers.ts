@@ -2,7 +2,8 @@ import { albums, images, favorites, albumSets, albumPeople, imagePeople, clientP
 import { subscriptions, plans } from "@/db/d1-schema/billing";
 import { profiles } from "@/db/d1-schema/profiles";
 import type { AppRouteHandler } from "@/lib/types";
-import { eq, desc, and, sql, gt } from 'drizzle-orm';
+import { eq, desc, and, sql, gt, is, SQL } from 'drizzle-orm';
+import { SQLiteAsyncDialect } from 'drizzle-orm/sqlite-core';
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, UpdateImageBrowseRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute, PutAlbumSetsRoute, GetAlbumSetsRoute, PutAlbumPeopleRoute, GetAlbumPeopleRoute, PutClientPersonRoute, VectorsUploadUrlRoute, PutAlbumVectorsRoute, DeleteAlbumVectorsRoute } from "./album.routes";
 import { useBackBlaze } from "@/lib/backblaze";
@@ -10,6 +11,17 @@ import { GLOBAL_MAX_IMAGES } from "@/lib/constants";
 import { getOwnedAlbum } from "@/lib/album-access";
 import { loadAlbumSets } from "@/lib/album-sets";
 import { loadAlbumPeople } from "@/lib/album-people";
+
+const dialect = new SQLiteAsyncDialect();
+
+// drizzle's D1 batch can't take raw db.run(sql) items (it calls stmt.bind on them and they have
+// no stmt), so batches that need raw statements go to D1 directly; drizzle only builds the SQL.
+function d1Batch(d1: D1Database, queries: Array<SQL | { toSQL(): { sql: string; params: unknown[] } }>) {
+  return d1.batch(queries.map((q) => {
+    const { sql: text, params } = is(q, SQL) ? dialect.sqlToQuery(q) : q.toSQL();
+    return d1.prepare(text).bind(...params);
+  }));
+}
 
 // Tags are stored space-joined; undefined leaves the column untouched, null or [] clears it.
 const joinTags = (tags: string[] | null | undefined) =>
@@ -1194,17 +1206,17 @@ export const putAlbumSets: AppRouteHandler<PutAlbumSetsRoute> = async (c) => {
 
   // Covers and members are checked against this album's images inside the statements, so an image
   // deleted meanwhile is dropped instead of failing a foreign key. Deleting the sets cascades to their memberships.
-  const [, , , members] = await db.batch([
+  const [, , , members] = await d1Batch(c.env.lumo_db, [
     db.delete(albumSets).where(eq(albumSets.albumId, albumId)),
     db.update(albums).set({ updatedAt: new Date() }).where(eq(albums.id, albumId)),
-    db.run(sql`insert into album_sets (album_id, id, name, position, cover_image_id)
+    sql`insert into album_sets (album_id, id, name, position, cover_image_id)
       select ${albumId}, s.value ->> 'id', s.value ->> 'name', s.value ->> 'position',
         (select i.id from images i where i.id = s.value ->> 'coverImageId' and i.album_id = ${albumId})
-      from json_each(${json}) s`),
-    db.run(sql`insert into set_images (album_id, set_id, image_id, position)
+      from json_each(${json}) s`,
+    sql`insert into set_images (album_id, set_id, image_id, position)
       select ${albumId}, s.value ->> 'id', i.id, m.key
       from json_each(${json}) s, json_each(s.value, '$.imageIds') m
-      join images i on i.id = m.value and i.album_id = ${albumId}`),
+      join images i on i.id = m.value and i.album_id = ${albumId}`,
   ]);
 
   return c.json(
@@ -1248,21 +1260,21 @@ export const putAlbumPeople: AppRouteHandler<PutAlbumPeopleRoute> = async (c) =>
   // Dropped people cascade to image_people and client links; kept people keep theirs.
   // Covers and members are checked against this album's images inside the statements (see putAlbumSets).
   // "where true" lets SQLite parse the upsert after a select.
-  const [, , , , members] = await db.batch([
+  const [, , , , members] = await d1Batch(c.env.lumo_db, [
     db.delete(albumPeople).where(and(eq(albumPeople.albumId, albumId), sql`${albumPeople.id} not in ${jsonIds(people.map(p => p.id))}`)),
     db.delete(imagePeople).where(eq(imagePeople.albumId, albumId)),
     db.update(albums).set({ updatedAt: new Date() }).where(eq(albums.id, albumId)),
-    db.run(sql`insert into album_people (album_id, id, name, position, cover_image_id, box)
+    sql`insert into album_people (album_id, id, name, position, cover_image_id, box)
       select ${albumId}, p.value ->> 'id', p.value ->> 'name', p.value ->> 'position',
         (select i.id from images i where i.id = p.value ->> 'coverImageId' and i.album_id = ${albumId}),
         p.value ->> 'box'
       from json_each(${json}) p where true
       on conflict (album_id, id) do update set name = excluded.name, position = excluded.position,
-        cover_image_id = excluded.cover_image_id, box = excluded.box, updated_at = unixepoch()`),
-    db.run(sql`insert into image_people (album_id, person_id, image_id)
+        cover_image_id = excluded.cover_image_id, box = excluded.box, updated_at = unixepoch()`,
+    sql`insert into image_people (album_id, person_id, image_id)
       select ${albumId}, p.value ->> 'id', i.id
       from json_each(${json}) p, json_each(p.value, '$.imageIds') m
-      join images i on i.id = m.value and i.album_id = ${albumId}`),
+      join images i on i.id = m.value and i.album_id = ${albumId}`,
   ]);
 
   return c.json(
