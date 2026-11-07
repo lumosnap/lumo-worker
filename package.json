@@ -19,20 +19,20 @@
     "build": "tsc && tsc-alias"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.939.0",
-    "@aws-sdk/s3-request-presigner": "^3.939.0",
-    "@hono/zod-openapi": "^1.1.4",
-    "@paralleldrive/cuid2": "^3.0.4",
-    "@scalar/hono-api-reference": "^0.9.22",
-    "better-auth": "^1.6.11",
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "@aws-sdk/s3-request-presigner": "^3.1161.0",
+    "@hono/zod-openapi": "^1.6.3",
+    "@paralleldrive/cuid2": "^3.3.0",
+    "@scalar/hono-api-reference": "^0.12.17",
+    "better-auth": "^1.7.16",
     "dotenv": "^17.2.3",
     "dotenv-expand": "^12.0.3",
-    "drizzle-orm": "^0.45.2",
-    "hono": "^4.10.4",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.16",
     "hono-pino": "^0.10.3",
-    "pino": "^10.1.0",
+    "pino": "^10.4.0",
     "stoker": "^2.0.1",
-    "zod": "^4.1.12"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^6.2.0",
@@ -40,14 +40,14 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.9.2",
     "cross-env": "^10.1.0",
-    "drizzle-kit": "^0.31.6",
-    "esbuild": "^0.25.12",
+    "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2",
     "esbuild-plugin-path-alias": "^1.0.7",
     "eslint": "^9.39.0",
     "eslint-plugin-format": "^1.0.2",
-    "tsc-alias": "^1.8.16",
-    "tsx": "^4.20.6",
+    "tsc-alias": "^1.9.10",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "wrangler": "^4.45.3"
+    "wrangler": "^4.157.0"
   }
 }
