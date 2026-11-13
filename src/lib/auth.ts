@@ -39,7 +39,7 @@ export function createAuth(db: DrizzleD1Database<typeof schema>, env: Environmen
     baseURL: env.BETTER_AUTH_URL,
     trustedOrigins: ["http://localhost:3000", "http://localhost:5173", env.WEB_DOMAIN, env.ONBOARDING_URL, env.ADMIN_DOMAIN],
     session: {
-      expiresIn: 60 * 60 * 24 * 7, // 7 days total session lifetime in database
+      expiresIn: 60 * 60 * 24 * 90, // 90 days: desktop app stays signed in like other desktop apps
       updateAge: 60 * 60 * 24, // Update session after 1 day of inactivity
       cookieCache: {
         enabled: true,
