@@ -1,8 +1,8 @@
 import { albums, images, favorites, albumSets, albumPeople, imagePeople, clientPeople } from "@/db/d1-schema/albums";
 import { subscriptions, plans } from "@/db/d1-schema/billing";
 import { profiles } from "@/db/d1-schema/profiles";
-import type { AppRouteHandler } from "@/lib/types";
-import { eq, desc, and, sql, gt, is, SQL } from 'drizzle-orm';
+import type { AppBindings, AppRouteHandler } from "@/lib/types";
+import { eq, desc, and, or, sql, gt, is, SQL } from 'drizzle-orm';
 import { SQLiteAsyncDialect } from 'drizzle-orm/sqlite-core';
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import type { CreateAlbumRoute, GenerateUploadUrlRoute, ListAlbumsRoute, ConfirmUploadRoute, UpdateImagesRoute, UpdateImageBrowseRoute, GetAlbumImagesRoute, DeleteImageRoute, BulkDeleteImagesRoute, GetAlbumFavoritesRoute, DeleteAlbumRoute, CreateShareLinkRoute, PutAlbumSetsRoute, GetAlbumSetsRoute, PutAlbumPeopleRoute, GetAlbumPeopleRoute, PutClientPersonRoute, VectorsUploadUrlRoute, PutAlbumVectorsRoute, DeleteAlbumVectorsRoute } from "./album.routes";
@@ -21,6 +21,41 @@ function d1Batch(d1: D1Database, queries: Array<SQL | { toSQL(): { sql: string; 
     const { sql: text, params } = is(q, SQL) ? dialect.sqlToQuery(q) : q.toSQL();
     return d1.prepare(text).bind(...params);
   }));
+}
+
+type Db = AppBindings['Variables']['db'];
+
+/** Storage keys are `${albumId}/...`; a key from a client must belong to the album it names */
+const ownKey = (albumId: string, key: string) => key.startsWith(`${albumId}/`) && !key.includes('..');
+type Logger = AppBindings['Variables']['logger'];
+
+/**
+ * Delete storage objects that no image row uses any more. Before 0009 a repeated confirm could
+ * leave two rows on one key; deleting either must not break the other. Call after the row is gone.
+ * Keys start with the album id, so a row sharing one is always in the same album.
+ */
+async function deleteUnreferenced(
+  logger: Logger,
+  db: Db,
+  albumId: string,
+  keys: Array<string | null | undefined>,
+  isSecondaryStorage: boolean,
+  deleteFile: (key: string, secondary?: boolean) => Promise<unknown>,
+) {
+  // Never touch another album's objects, whatever a client sent
+  for (const key of new Set(keys.filter((k): k is string => !!k && ownKey(albumId, k)))) {
+    const [ref] = await db
+      .select({ id: images.id })
+      .from(images)
+      .where(and(eq(images.albumId, albumId), or(eq(images.b2FileName, key), eq(images.thumbnailB2FileName, key))))
+      .limit(1);
+    if (ref) continue;
+    try {
+      await deleteFile(key, isSecondaryStorage);
+    } catch (error) {
+      logger.error({ error, key }, "Failed to delete file from storage");
+    }
+  }
 }
 
 // Tags are stored space-joined; undefined leaves the column untouched, null or [] clears it.
@@ -611,8 +646,30 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
   }
 
   // Save image metadata to database - handle individual failures gracefully
-  const savedImages: { id: number; originalFilename: string; b2FileName: string }[] = [];
+  // key echoes the request (unique per upload) so clients can match results back
+  type Confirmed = { id: number; originalFilename: string; b2FileName: string; key: string; duplicate?: true };
+  const savedImages: Confirmed[] = [];
   const failedImages: { filename: string; error: string }[] = [];
+  let inserted = 0;
+  let totalSize = 0;
+  const { deleteFile } = await useBackBlaze(c.env);
+
+  // A repeated confirm (the desktop retrying after a lost response) is the same photo: hand back
+  // the row that exists instead of adding a second one, and drop the copy the retry uploaded.
+  const findExisting = (hash: string | null | undefined, key: string) =>
+    db
+      .select({ id: images.id, originalFilename: images.originalFilename, b2FileName: images.b2FileName })
+      .from(images)
+      .where(and(eq(images.albumId, albumId), hash ? or(eq(images.sourceImageHash, hash), eq(images.b2FileName, key)) : eq(images.b2FileName, key)))
+      .limit(1)
+      .then((rows) => rows[0]);
+  const useExisting = async (row: { id: number; originalFilename: string; b2FileName: string }, img: (typeof uploadedImages)[number]) => {
+    // originalFilename is the request's: older desktops match results on it
+    savedImages.push({ ...row, originalFilename: img.filename, key: img.key, duplicate: true });
+    if (row.b2FileName !== img.key) {
+      await deleteUnreferenced(c.get("logger"), db, albumId, [img.key, img.thumbnailKey], album.isSecondaryStorage!, deleteFile);
+    }
+  };
 
   for (const img of uploadedImages) {
     try {
@@ -625,8 +682,19 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
         continue;
       }
 
+      if (!ownKey(albumId, img.key) || (img.thumbnailKey && !ownKey(albumId, img.thumbnailKey))) {
+        failedImages.push({ filename: img.filename, error: 'Key does not belong to this album' });
+        continue;
+      }
+
       // Validate fileSize is a valid number
       const fileSize = typeof img.fileSize === 'number' && !isNaN(img.fileSize) ? img.fileSize : 0;
+
+      const existing = await findExisting(img.sourceImageHash, img.key);
+      if (existing) {
+        await useExisting(existing, img);
+        continue;
+      }
 
       const [savedImage] = await db
         .insert(images)
@@ -656,8 +724,16 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
           originalFilename: images.originalFilename,
           b2FileName: images.b2FileName,
         });
-      savedImages.push(savedImage);
+      savedImages.push({ ...savedImage, key: img.key });
+      inserted++;
+      totalSize += fileSize;
     } catch (insertError) {
+      // Two confirms raced past findExisting: images_album_hash_uq rejected the second insert
+      const existing = img.key && img.filename ? await findExisting(img.sourceImageHash, img.key).catch(() => undefined) : undefined;
+      if (existing) {
+        await useExisting(existing, img);
+        continue;
+      }
       c.get("logger").error({ error: insertError, filename: img.filename }, "Failed to insert image");
       failedImages.push({
         filename: img.filename || 'unknown',
@@ -678,13 +754,6 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
     );
   }
 
-  // Calculate total size only from successfully saved images
-  const totalSize = uploadedImages
-    .filter(img => savedImages.some(saved => saved.b2FileName === img.key))
-    .reduce((sum, img) => {
-      const size = typeof img.fileSize === 'number' && !isNaN(img.fileSize) ? img.fileSize : 0;
-      return sum + size;
-    }, 0);
 
   // Generate share token if not exists
   let shareToken = album.shareLinkToken;
@@ -704,9 +773,10 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
     await db
       .update(albums)
       .set({
-        totalImages: album.totalImages + savedImages.length,
-        totalSize: (album.totalSize || 0) + totalSize,
-        shareLinkToken: shareToken,
+        // Relative to the stored value: concurrent confirms must not overwrite each other's counts
+        totalImages: sql`${albums.totalImages} + ${inserted}`,
+        totalSize: sql`coalesce(${albums.totalSize}, 0) + ${totalSize}`,
+        shareLinkToken: sql`coalesce(${albums.shareLinkToken}, ${shareToken})`,
         updatedAt: new Date(),
       })
       .where(eq(albums.id, albumId));
@@ -726,7 +796,7 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
       await db
         .update(profiles)
         .set({
-          totalImages: sql`${profiles.totalImages} + ${savedImages.length}`,
+          totalImages: sql`${profiles.totalImages} + ${inserted}`,
           updatedAt: new Date(),
         })
         .where(eq(profiles.userId, user.id));
@@ -739,7 +809,7 @@ export const confirmUpload: AppRouteHandler<ConfirmUploadRoute> = async (c) => {
           businessName: null,
           phone: null,
           storageUsed: 0,
-          totalImages: savedImages.length,
+          totalImages: inserted,
         });
     }
   } catch (profileError) {
@@ -791,7 +861,13 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
   if (!owned.album) return owned.response;
   const album = owned.album;
 
-  const { deleteFile } = await useBackBlaze(c.env);
+  const { deleteFile, fileExists } = await useBackBlaze(c.env);
+
+  const foreign = imagesToUpdate.find((img) =>
+    !ownKey(albumId, img.b2FileName) || (img.thumbnailB2FileName && !ownKey(albumId, img.thumbnailB2FileName)));
+  if (foreign) {
+    return c.json({ success: false, message: "Key does not belong to this album" }, HttpStatusCodes.FORBIDDEN);
+  }
 
   // Process each image update
   const updatedImages = await Promise.all(
@@ -809,24 +885,15 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
       // Calculate size difference for album totalSize
       const sizeDiff = img.fileSize - existingImage.fileSize;
 
-      // Delete old files from Backblaze if filenames changed
-      if (img.b2FileName !== existingImage.b2FileName) {
-        try {
-          await deleteFile(existingImage.b2FileName, album.isSecondaryStorage!);
-        } catch (error) {
-          c.get("logger").error({ error, b2FileName: existingImage.b2FileName }, "Failed to delete old B2 file");
-        }
-      }
-
-      if (img.thumbnailB2FileName && img.thumbnailB2FileName !== existingImage.thumbnailB2FileName) {
-        try {
-          if (existingImage.thumbnailB2FileName) {
-            await deleteFile(existingImage.thumbnailB2FileName, album.isSecondaryStorage!);
-          }
-        } catch (error) {
-          c.get("logger").error({ error, thumbnailB2FileName: existingImage.thumbnailB2FileName }, "Failed to delete old B2 thumbnail");
-        }
-      }
+      // Keys are unique per upload now, and older desktops don't send the thumbnail key: it went
+      // to the same upload id under thumbnails/ (see getSignedUrls), if a thumbnail was uploaded.
+      const derived = img.thumbnailB2FileName === undefined && img.b2FileName !== existingImage.b2FileName
+        && img.b2FileName.includes('/originals/')
+        ? img.b2FileName.replace('/originals/', '/thumbnails/')
+        : null;
+      const thumbnailB2FileName = img.thumbnailB2FileName !== undefined
+        ? img.thumbnailB2FileName // null clears, as before
+        : (derived && await fileExists(derived, album.isSecondaryStorage!).catch(() => false) ? derived : undefined);
 
       // Update image record in database
       const [updatedImage] = await db
@@ -838,7 +905,7 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
           width: img.width,
           height: img.height,
           thumbnailB2FileId: img.thumbnailB2FileId,
-          thumbnailB2FileName: img.thumbnailB2FileName,
+          thumbnailB2FileName,
           // undefined keys are skipped by drizzle, so omitted fields stay untouched
           capturedAt: img.capturedAt,
           burstId: img.burstId,
@@ -855,6 +922,16 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
           originalFilename: images.originalFilename,
           b2FileName: images.b2FileName,
         });
+
+      // Old objects go only after the row moved off them, and only if no other row uses them
+      await deleteUnreferenced(
+        c.get("logger"), db, albumId,
+        [
+          img.b2FileName !== existingImage.b2FileName ? existingImage.b2FileName : null,
+          thumbnailB2FileName && thumbnailB2FileName !== existingImage.thumbnailB2FileName ? existingImage.thumbnailB2FileName : null,
+        ],
+        album.isSecondaryStorage!, deleteFile,
+      );
 
       return { updatedImage, sizeDiff };
     })
@@ -880,7 +957,7 @@ export const updateImages: AppRouteHandler<UpdateImagesRoute> = async (c) => {
   await db
     .update(albums)
     .set({
-      totalSize: Math.max(0, (album.totalSize || 0) + totalSizeDiff),
+      totalSize: sql`MAX(0, coalesce(${albums.totalSize}, 0) + ${totalSizeDiff})`,
       updatedAt: new Date(),
     })
     .where(eq(albums.id, albumId));
@@ -1045,33 +1122,17 @@ export const deleteImage: AppRouteHandler<DeleteImageRoute> = async (c) => {
     );
   }
 
-  // Delete file from Backblaze B2
-  try {
-    if (image.b2FileName) {
-      await deleteFile(image.b2FileName, album.isSecondaryStorage!);
-    }
-    if (image.thumbnailB2FileName) {
-      await deleteFile(image.thumbnailB2FileName, album.isSecondaryStorage!);
-    }
-  } catch (deleteError) {
-    c.get("logger").error({ error: deleteError }, "Failed to delete file from storage");
-    // Continue with database deletion even if storage deletion fails
-  }
-
-  // Delete image from database
+  // Delete image from database, then its files unless another row shares them
   await db
     .delete(images)
     .where(and(eq(images.id, imageId), eq(images.albumId, albumId)));
-
-  // Update album statistics
-  const newTotalImages = Math.max(0, album.totalImages - 1);
-  const newTotalSize = Math.max(0, (album.totalSize || 0) - image.fileSize);
+  await deleteUnreferenced(c.get("logger"), db, albumId, [image.b2FileName, image.thumbnailB2FileName], album.isSecondaryStorage!, deleteFile);
 
   await db
     .update(albums)
     .set({
-      totalImages: newTotalImages,
-      totalSize: newTotalSize,
+      totalImages: sql`MAX(0, ${albums.totalImages} - 1)`,
+      totalSize: sql`MAX(0, coalesce(${albums.totalSize}, 0) - ${image.fileSize})`,
       updatedAt: new Date(),
     })
     .where(eq(albums.id, albumId));
@@ -1133,34 +1194,22 @@ export const bulkDeleteImages: AppRouteHandler<BulkDeleteImagesRoute> = async (c
   // Delete files from Backblaze and database
   for (const image of imagesToRemove) {
     try {
-      // Delete file from Backblaze B2
-      if (image.b2FileName) {
-        await deleteFile(image.b2FileName, album.isSecondaryStorage!);
-      }
-      if (image.thumbnailB2FileName) {
-        await deleteFile(image.thumbnailB2FileName, album.isSecondaryStorage!);
-      }
-
-      // Delete image from database
+      // Row first, then its files unless another row shares them
       await db.delete(images).where(eq(images.id, image.id));
-
       deletedCount++;
       totalSizeReduced += image.fileSize;
+      await deleteUnreferenced(c.get("logger"), db, albumId, [image.b2FileName, image.thumbnailB2FileName], album.isSecondaryStorage!, deleteFile);
     } catch (deleteError) {
       c.get("logger").error({ error: deleteError, imageId: image.id }, "Failed to delete image");
       // Continue with other images
     }
   }
 
-  // Update album statistics
-  const newTotalImages = Math.max(0, album.totalImages - deletedCount);
-  const newTotalSize = Math.max(0, (album.totalSize || 0) - totalSizeReduced);
-
   await db
     .update(albums)
     .set({
-      totalImages: newTotalImages,
-      totalSize: newTotalSize,
+      totalImages: sql`MAX(0, ${albums.totalImages} - ${deletedCount})`,
+      totalSize: sql`MAX(0, coalesce(${albums.totalSize}, 0) - ${totalSizeReduced})`,
       updatedAt: new Date(),
     })
     .where(eq(albums.id, albumId));

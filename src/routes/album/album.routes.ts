@@ -79,14 +79,18 @@ const confirmUploadSchema = z.object({
   }))
 });
 
+const confirmedImageSchema = z.object({
+  id: z.number(),
+  originalFilename: z.string(),
+  b2FileName: z.string(),
+  key: z.string().describe("Echo of the request's key (unique per upload), to match results back."),
+  duplicate: z.boolean().optional().describe("Already confirmed earlier (same hash or key); nothing was added."),
+});
+
 const confirmUploadResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
-  data: z.array(z.object({
-    id: z.number(),
-    originalFilename: z.string(),
-    b2FileName: z.string(),
-  })).optional()
+  data: z.array(confirmedImageSchema).optional()
 })
 
 const updateImagesSchema = z.object({
@@ -387,11 +391,7 @@ export const confirmUploadRoute = createRoute({
       z.object({
         success: z.boolean(),
         message: z.string(),
-        data: z.array(z.object({
-          id: z.number(),
-          originalFilename: z.string(),
-          b2FileName: z.string(),
-        })).optional(),
+        data: z.array(confirmedImageSchema).optional(),
         errors: z.array(z.object({
           filename: z.string(),
           error: z.string(),

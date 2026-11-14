@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { sqliteTable, text, integer, real, index, unique, primaryKey, foreignKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index, uniqueIndex, unique, primaryKey, foreignKey } from 'drizzle-orm/sqlite-core';
 import { user } from './auth';
 
 export const albums = sqliteTable("albums", {
@@ -55,6 +55,10 @@ export const images = sqliteTable("images", {
     return {
         albumIdIdx: index('images_album_id_idx').on(t.albumId),
         sourceImageHashIdx: index('images_source_image_hash_idx').on(t.sourceImageHash),
+        b2KeyIdx: index('images_album_b2_key_idx').on(t.albumId, t.b2FileName),
+        thumbKeyIdx: index('images_album_thumb_key_idx').on(t.albumId, t.thumbnailB2FileName),
+        // 0009: one row per photo per album; a repeated confirm returns the existing row
+        albumHashUq: uniqueIndex('images_album_hash_uq').on(t.albumId, t.sourceImageHash).where(sql`source_image_hash IS NOT NULL`),
         uploadOrderIdx: index('images_upload_order_idx').on(t.albumId, t.uploadOrder),
         capturedAtIdx: index('images_captured_at_idx').on(t.albumId, t.capturedAt),
     }
@@ -142,4 +146,11 @@ export const clientPeople = sqliteTable("client_people", {
         // Composite FK can't SET NULL (album_id is NOT NULL), so a dropped person drops the link.
         personFk: foreignKey({ columns: [t.albumId, t.personId], foreignColumns: [albumPeople.albumId, albumPeople.id] }).onDelete("cascade"),
     }
+});
+
+// 0009: storage keys left by merged duplicate images, for a reviewed manual cleanup (30+ days on)
+export const orphanB2Keys = sqliteTable("orphan_b2_keys", {
+    key: text("key").primaryKey(),
+    isSecondary: integer("is_secondary", { mode: "boolean" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 });

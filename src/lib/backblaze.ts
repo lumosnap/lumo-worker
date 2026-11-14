@@ -44,8 +44,10 @@ export const useBackBlaze = async (env: Environment) => {
     
     const uploadUrls = await Promise.all(
       files.map(async (file) => {
-        // Generate key for original image in originals/ subfolder
-        const originalKey = `${albumId}/originals/${file.filename}`;
+        // A fresh id per upload: two photos that compress to the same name (IMG_1.jpg, IMG_1.png)
+        // or a retried upload never share an object. The filename stays last: the web shows it.
+        const id = crypto.randomUUID();
+        const originalKey = `${albumId}/originals/${id}/${file.filename}`;
         const originalCommand = new PutObjectCommand({
           Bucket: config.bucketName,
           Key: originalKey,
@@ -58,7 +60,7 @@ export const useBackBlaze = async (env: Environment) => {
         });
 
         // Generate key for thumbnail in thumbnails/ subfolder
-        const thumbnailKey = `${albumId}/thumbnails/${file.filename}`;
+        const thumbnailKey = `${albumId}/thumbnails/${id}/${file.filename}`;
         const thumbnailCommand = new PutObjectCommand({
           Bucket: config.bucketName,
           Key: thumbnailKey,
