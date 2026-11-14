@@ -1098,6 +1098,7 @@ export const getAlbumImages: AppRouteHandler<GetAlbumImagesRoute> = async (c) =>
       message: "Album and images retrieved successfully",
       data: {
         ...album,
+        writeToken: undefined, // the version guard's internal state (see claimVersion)
         preview_link: previewLink,
         images: imagesWithUrls,
       },
