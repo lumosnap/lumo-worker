@@ -698,15 +698,26 @@ const albumSetSchema = z.object({
   imageIds: z.array(z.number().int()).max(GLOBAL_MAX_IMAGES).describe("Server image ids, in display order."),
 });
 
+const baseVersion = z.number().int().min(0).optional()
+  .describe("The version this replace is based on. Stale → 409; omitted = last write wins.");
+
+const versionConflictSchema = z.object({
+  success: z.literal(false),
+  message: z.string(),
+  version: z.number().int().describe("The current version: pull, merge, retry with it."),
+});
+
 const putAlbumSetsSchema = z.object({
   sets: z.array(albumSetSchema).max(200)
     .refine(sets => new Set(sets.map(s => s.id)).size === sets.length, "Duplicate set id"),
+  baseVersion,
 });
 
 const putAlbumSetsResponseSchema = z.object({
   success: z.boolean(),
   sets: z.number(),
   memberships: z.number(),
+  version: z.number().int(),
 });
 
 const ownerErrorResponses = {
@@ -729,6 +740,7 @@ export const putAlbumSetsRoute = createRoute({
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(putAlbumSetsResponseSchema, "Sets replaced"),
+    [HttpStatusCodes.CONFLICT]: jsonContent(versionConflictSchema, "Sets changed since baseVersion"),
     ...ownerErrorResponses,
   },
 })
@@ -745,7 +757,7 @@ export const getAlbumSetsRoute = createRoute({
     }),
   },
   responses: {
-    [HttpStatusCodes.OK]: jsonContent(z.object({ sets: z.array(albumSetSchema) }), "Album sets"),
+    [HttpStatusCodes.OK]: jsonContent(z.object({ sets: z.array(albumSetSchema), version: z.number().int() }), "Album sets"),
     ...ownerErrorResponses,
   },
 })
@@ -763,6 +775,7 @@ const albumPersonSchema = z.object({
 const putAlbumPeopleSchema = z.object({
   people: z.array(albumPersonSchema).max(300)
     .refine(people => new Set(people.map(p => p.id)).size === people.length, "Duplicate person id"),
+  baseVersion,
 });
 
 export const putAlbumPeopleRoute = createRoute({
@@ -779,9 +792,10 @@ export const putAlbumPeopleRoute = createRoute({
   },
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
-      z.object({ success: z.boolean(), people: z.number(), memberships: z.number() }),
+      z.object({ success: z.boolean(), people: z.number(), memberships: z.number(), version: z.number().int() }),
       "People replaced",
     ),
+    [HttpStatusCodes.CONFLICT]: jsonContent(versionConflictSchema, "People changed since baseVersion"),
     ...ownerErrorResponses,
   },
 })
@@ -798,7 +812,7 @@ export const getAlbumPeopleRoute = createRoute({
     }),
   },
   responses: {
-    [HttpStatusCodes.OK]: jsonContent(z.object({ people: z.array(albumPersonSchema) }), "Album people"),
+    [HttpStatusCodes.OK]: jsonContent(z.object({ people: z.array(albumPersonSchema), version: z.number().int() }), "Album people"),
     ...ownerErrorResponses,
   },
 })

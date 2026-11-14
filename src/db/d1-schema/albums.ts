@@ -17,6 +17,10 @@ export const albums = sqliteTable("albums", {
     vectorsCount: integer("vectors_count"),
     vectorsModel: text("vectors_model"),
     vectorsPrevKey: text("vectors_prev_key"), // previous vector file, kept for share tabs still reading it
+    // 0010: bumped by every sets/people replace; a PUT with a stale baseVersion gets 409
+    setsVersion: integer("sets_version").notNull().default(0),
+    peopleVersion: integer("people_version").notNull().default(0),
+    writeToken: text("write_token"), // which request holds the current batch's write (see claimVersion)
     createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`).notNull(),
 }, (t) => {

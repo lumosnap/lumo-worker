@@ -58,6 +58,27 @@ async function deleteUnreferenced(
   }
 }
 
+/**
+ * Optimistic version for a wholesale replace. `claim` (first in the batch) bumps the version and
+ * stamps a fresh token, only if the caller saw the current version or sent none. Every later
+ * statement adds `held`, so a stale push changes nothing. D1 runs a batch serially in one
+ * transaction, so no other write can interleave. (Checking "version = base + 1" instead would let
+ * a stale push through right after another computer bumped from base.)
+ */
+function claimVersion(albumId: string, column: 'sets_version' | 'people_version', base: number | undefined) {
+  const token = crypto.randomUUID();
+  const col = sql.raw(column);
+  const b = base ?? null;
+  return {
+    claim: sql`update albums set ${col} = ${col} + 1, write_token = ${token}, updated_at = unixepoch()
+      where id = ${albumId} and (${b} is null or ${col} = ${b})`,
+    held: sql`exists (select 1 from albums where id = ${albumId} and write_token = ${token})`,
+    version: sql`select ${col} as version from albums where id = ${albumId}`,
+  };
+}
+
+const versionOf = (r: D1Result) => (r.results[0] as { version: number } | undefined)?.version ?? 0;
+
 // Tags are stored space-joined; undefined leaves the column untouched, null or [] clears it.
 const joinTags = (tags: string[] | null | undefined) =>
   tags === undefined ? undefined : tags?.length ? tags.join(' ') : null;
@@ -154,7 +175,8 @@ export const listAlbums: AppRouteHandler<ListAlbumsRoute> = async (c) => {
 
   // Add preview link to each album if it has images
   const results = await Promise.all(
-    albumList.map(async (album) => {
+    // write_token is the version guard's internal state (see claimVersion), not album data
+    albumList.map(async ({ writeToken: _token, ...album }) => {
       if (album.totalImages > 0) {
         // Get the first image for the album (ordered by uploadOrder, descending)
         const [firstImage] = await db
@@ -1245,31 +1267,40 @@ export const putAlbumSets: AppRouteHandler<PutAlbumSetsRoute> = async (c) => {
 
   const db = c.get('db');
   const { albumId } = c.req.valid("param");
-  const { sets } = c.req.valid("json");
+  const { sets, baseVersion } = c.req.valid("json");
 
   const owned = await getOwnedAlbum(c, albumId, user.id);
   if (!owned.album) return owned.response;
+  const v = claimVersion(albumId, 'sets_version', baseVersion);
 
   // Bound as one JSON parameter. Member position is the index in imageIds, so dropped ids leave harmless gaps.
   const json = JSON.stringify(sets.map(s => ({ ...s, imageIds: [...new Set(s.imageIds)] })));
 
   // Covers and members are checked against this album's images inside the statements, so an image
   // deleted meanwhile is dropped instead of failing a foreign key. Deleting the sets cascades to their memberships.
-  const [, , , members] = await d1Batch(c.env.lumo_db, [
-    db.delete(albumSets).where(eq(albumSets.albumId, albumId)),
-    db.update(albums).set({ updatedAt: new Date() }).where(eq(albums.id, albumId)),
+  const [claimed, , , members, version] = await d1Batch(c.env.lumo_db, [
+    v.claim,
+    db.delete(albumSets).where(and(eq(albumSets.albumId, albumId), v.held)),
     sql`insert into album_sets (album_id, id, name, position, cover_image_id)
       select ${albumId}, s.value ->> 'id', s.value ->> 'name', s.value ->> 'position',
         (select i.id from images i where i.id = s.value ->> 'coverImageId' and i.album_id = ${albumId})
-      from json_each(${json}) s`,
+      from json_each(${json}) s where ${v.held}`,
     sql`insert into set_images (album_id, set_id, image_id, position)
       select ${albumId}, s.value ->> 'id', i.id, m.key
       from json_each(${json}) s, json_each(s.value, '$.imageIds') m
-      join images i on i.id = m.value and i.album_id = ${albumId}`,
+      join images i on i.id = m.value and i.album_id = ${albumId}
+      where ${v.held}`,
+    v.version,
   ]);
 
+  if (claimed.meta.changes === 0) {
+    return c.json(
+      { success: false as const, message: "Sets changed on another computer", version: versionOf(version) },
+      HttpStatusCodes.CONFLICT
+    );
+  }
   return c.json(
-    { success: true, sets: sets.length, memberships: members.meta.changes },
+    { success: true, sets: sets.length, memberships: members.meta.changes, version: versionOf(version) },
     HttpStatusCodes.OK
   );
 }
@@ -1284,7 +1315,7 @@ export const getAlbumSets: AppRouteHandler<GetAlbumSetsRoute> = async (c) => {
   const owned = await getOwnedAlbum(c, albumId, user.id);
   if (!owned.album) return owned.response;
 
-  return c.json({ sets: await loadAlbumSets(c.get('db'), albumId) }, HttpStatusCodes.OK);
+  return c.json({ sets: await loadAlbumSets(c.get('db'), albumId), version: owned.album.setsVersion }, HttpStatusCodes.OK);
 }
 
 // JSON array bound as one parameter, so id lists of any length stay under D1's 100-param limit.
@@ -1299,35 +1330,44 @@ export const putAlbumPeople: AppRouteHandler<PutAlbumPeopleRoute> = async (c) =>
 
   const db = c.get('db');
   const { albumId } = c.req.valid("param");
-  const { people } = c.req.valid("json");
+  const { people, baseVersion } = c.req.valid("json");
 
   const owned = await getOwnedAlbum(c, albumId, user.id);
   if (!owned.album) return owned.response;
+  const v = claimVersion(albumId, 'people_version', baseVersion);
 
   const json = JSON.stringify(people.map(p => ({ ...p, imageIds: [...new Set(p.imageIds)] })));
 
   // Dropped people cascade to image_people and client links; kept people keep theirs.
   // Covers and members are checked against this album's images inside the statements (see putAlbumSets).
-  // "where true" lets SQLite parse the upsert after a select.
-  const [, , , , members] = await d1Batch(c.env.lumo_db, [
-    db.delete(albumPeople).where(and(eq(albumPeople.albumId, albumId), sql`${albumPeople.id} not in ${jsonIds(people.map(p => p.id))}`)),
-    db.delete(imagePeople).where(eq(imagePeople.albumId, albumId)),
-    db.update(albums).set({ updatedAt: new Date() }).where(eq(albums.id, albumId)),
+  // A WHERE clause (here the version guard) lets SQLite parse the upsert after a select.
+  const [claimed, , , , members, version] = await d1Batch(c.env.lumo_db, [
+    v.claim,
+    db.delete(albumPeople).where(and(eq(albumPeople.albumId, albumId), sql`${albumPeople.id} not in ${jsonIds(people.map(p => p.id))}`, v.held)),
+    db.delete(imagePeople).where(and(eq(imagePeople.albumId, albumId), v.held)),
     sql`insert into album_people (album_id, id, name, position, cover_image_id, box)
       select ${albumId}, p.value ->> 'id', p.value ->> 'name', p.value ->> 'position',
         (select i.id from images i where i.id = p.value ->> 'coverImageId' and i.album_id = ${albumId}),
         p.value ->> 'box'
-      from json_each(${json}) p where true
+      from json_each(${json}) p where ${v.held}
       on conflict (album_id, id) do update set name = excluded.name, position = excluded.position,
         cover_image_id = excluded.cover_image_id, box = excluded.box, updated_at = unixepoch()`,
     sql`insert into image_people (album_id, person_id, image_id)
       select ${albumId}, p.value ->> 'id', i.id
       from json_each(${json}) p, json_each(p.value, '$.imageIds') m
-      join images i on i.id = m.value and i.album_id = ${albumId}`,
+      join images i on i.id = m.value and i.album_id = ${albumId}
+      where ${v.held}`,
+    v.version,
   ]);
 
+  if (claimed.meta.changes === 0) {
+    return c.json(
+      { success: false as const, message: "People changed on another computer", version: versionOf(version) },
+      HttpStatusCodes.CONFLICT
+    );
+  }
   return c.json(
-    { success: true, people: people.length, memberships: members.meta.changes },
+    { success: true, people: people.length, memberships: members.meta.changes, version: versionOf(version) },
     HttpStatusCodes.OK
   );
 }
@@ -1342,7 +1382,7 @@ export const getAlbumPeople: AppRouteHandler<GetAlbumPeopleRoute> = async (c) =>
   const owned = await getOwnedAlbum(c, albumId, user.id);
   if (!owned.album) return owned.response;
 
-  return c.json({ people: await loadAlbumPeople(c.get('db'), albumId) }, HttpStatusCodes.OK);
+  return c.json({ people: await loadAlbumPeople(c.get('db'), albumId), version: owned.album.peopleVersion }, HttpStatusCodes.OK);
 }
 
 export const putClientPerson: AppRouteHandler<PutClientPersonRoute> = async (c) => {
